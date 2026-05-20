@@ -1,0 +1,325 @@
+@page "/JoinPageWithCode"
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject UserCaller uac
+@inject LobbyCaller lac
+@inject HostHubCaller HostHubCaller
+@inject PlayerHubCaller playerHub
+@inject WebGUI.Services.PlayerStateService playerState
+
+@using APICaller.API
+@using APICaller.Hub
+@using WebGUI.DTOs
+
+<div class="home-container">
+ <div class="question-bg">
+    <svg class="qmark q1" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+                 c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+                 C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#8AAB00"/>
+    </svg>
+
+    <svg class="qmark q2" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+                 c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+                 C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#A6E85C"/>
+    </svg>
+
+    <svg class="qmark q3" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+                 c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+                 C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#5BB933"/>
+    </svg>
+
+    <svg class="qmark q4" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+                 c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+                 C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#8AAB00"/>
+    </svg>
+
+    <svg class="qmark q5" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+                 c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+                 C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#5BB933"/>
+    </svg>
+
+    <svg class="qmark q6" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+                 c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+                 C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#A6E85C"/>
+    </svg>
+    <svg class="qmark q7" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+             c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+             C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#A6E85C"/>
+    </svg>
+    <svg class="qmark q8" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+             c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+             C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#A6E85C"/>
+    </svg>
+
+
+</div>
+
+
+
+    <div class="hero">
+        <h1 class="hero-title">
+            <span>W</span><span>i</span><span>t</span><span>C</span><span>h</span><span>e</span><span>c</span><span>k</span>
+        </h1>
+
+        <div class="join-form">
+            <input @bind="lobbyCode" class="join-input" placeholder="ENTER THE LOBBYCODE" />
+            <input @bind="playerName" class="join-input" placeholder="ENTER YOUR USERNAME" />
+            @if (!string.IsNullOrWhiteSpace(JoinError))
+            {
+                <div class="join-error">@JoinError</div>
+            }
+
+            <div class="avatar-container">
+                <div class="avatar-picker">
+                    <button type="button" class="quiz-btn small" @onclick="ToggleAvatarMenu">CHANGE AVATAR</button>
+                    @if (isAvatarMenuOpen)
+                    {
+                        <div class="avatar-menu">
+                            @foreach (var avatar in availableAvatars)
+                            {
+                                <button type="button"
+                                        class="avatar-option @(avatar == avatarPic ? "selected" : string.Empty)"
+                                        title="Choose avatar"
+                                        @onclick="() => SelectAvatarAsync(avatar)">
+                                    <img src="@avatar" class="avatar-option-img" alt="Avatar option" />
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+                <button type="button" class="avatar-circle" @onclick="ChangeAvatar" title="Click for a random avatar">
+                    @if (!string.IsNullOrEmpty(avatarPic))
+                    {
+                        <img src="@avatarPic" class="avatar-img" alt="Selected avatar" />
+                    }
+                    else
+                    {
+                        <span class="avatar-placeholder">A</span>
+                    }
+                </button>
+            </div>
+
+            <button class="quiz-btn play-btn" @onclick="JoinGame">PLAY</button>
+
+        </div>
+    </div>
+</div>
+
+@code {
+    private static IDisposable? _startGameBridgeSubscription;
+    private static IDisposable? _nextQuestionBridgeSubscription;
+
+    private string lobbyCode = "";
+    private string playerName = "";
+    private string avatarPic = "";
+    private string JoinError = string.Empty;
+    private bool isAvatarMenuOpen;
+
+    private List<string> availableAvatars = new();
+    private Random rng = new Random();
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await playerHub.Start();
+        await EnsureQuestionNavigationBridgeAsync();
+        LoadAvatarList();
+
+        var storedAvatar = await localStorage.GetItemAsync<string>("AvatarPic");
+        avatarPic = availableAvatars.Contains(storedAvatar ?? string.Empty)
+            ? storedAvatar!
+            : GetRandomAvatar();
+
+        await localStorage.SetItemAsync("AvatarPic", avatarPic);
+        
+    }
+    
+    private void LoadAvatarList()
+    {
+        availableAvatars.Clear();
+
+        availableAvatars.AddRange(
+        [
+            // "images/avatars/FemaleBlackHair.png",
+            // "images/avatars/FemaleBlueHair.png",
+            // "images/avatars/FemaleBrownHair.png",
+            // "images/avatars/FemaleGreenHair.png",
+            // "images/avatars/FemaleOrangeHair.png",
+            // "images/avatars/FemalePinkHair.png",
+            // "images/avatars/FemalePurpleHair.png",
+            // "images/avatars/FemaleRedHair.png",
+            // "images/avatars/FemaleWhiteHair.png",
+            // "images/avatars/FemaleYellowHair.png",
+            // "images/avatars/MaleBlackHair.png",
+            // "images/avatars/MaleBlueHair.png",
+            // "images/avatars/MaleBrownHair.png",
+            // "images/avatars/MaleGreenHair.png",
+            // "images/avatars/MaleOrangeHair.png",
+            // "images/avatars/MalePinkHair.png",
+            // "images/avatars/MalePurpleHair.png",
+            // "images/avatars/MaleRedHair.png",
+            // "images/avatars/MaleWhiteHair.png",
+            // "images/avatars/MaleYellowHair.png"
+            "images/avatars/person_4.png",
+            "images/avatars/person_5.png",
+            "images/avatars/person_6.png"
+        ]);
+    }
+
+    private async Task EnsureQuestionNavigationBridgeAsync()
+    {
+        _startGameBridgeSubscription?.Dispose();
+        _nextQuestionBridgeSubscription?.Dispose();
+
+        _startGameBridgeSubscription = playerHub.StartGame(async question =>
+        {
+            await HandleQuestionNavigationAsync(question);
+        });
+
+        _nextQuestionBridgeSubscription = playerHub.NextQuestion(async (question, player) =>
+        {
+            if (player != null)
+                playerState.UpdatePlayer(player);
+            await HandleQuestionNavigationAsync(question);
+        });
+
+        await Task.CompletedTask;
+    }
+
+    private async Task HandleQuestionNavigationAsync(QuestionDTO? question)
+    {
+        try
+        {
+            var activeLobbyCode = playerState.LobbyCode ?? lobbyCode.Trim();
+            if (string.IsNullOrWhiteSpace(activeLobbyCode))
+            {
+                return;
+            }
+
+            var route = await ResolveQuestionRouteAsync(activeLobbyCode, question);
+            nm.NavigateTo(route);
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private async Task<string> ResolveQuestionRouteAsync(string activeLobbyCode, QuestionDTO? question)
+    {
+        try
+        {
+            return await QuestionRouteHelper.ResolvePlayerProgressRouteAsync(lac, activeLobbyCode, question);
+        }
+        catch (Exception ex)
+        {
+        }
+
+        return $"/MultipleChoiceAnswers/{activeLobbyCode}";
+    }
+
+
+    private async Task ChangeAvatar()
+    {
+        if (availableAvatars.Count == 0)
+            return;
+
+        await SetAvatarAsync(GetRandomAvatar());
+        isAvatarMenuOpen = false;
+    }
+
+    private void ToggleAvatarMenu()
+    {
+        isAvatarMenuOpen = !isAvatarMenuOpen;
+    }
+
+    private async Task SelectAvatarAsync(string selectedAvatar)
+    {
+        await SetAvatarAsync(selectedAvatar);
+        isAvatarMenuOpen = false;
+    }
+
+    private string GetRandomAvatar()
+    {
+        if (availableAvatars.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        string newAvatar;
+
+        do
+        {
+            newAvatar = availableAvatars[rng.Next(availableAvatars.Count)];
+        }
+        while (newAvatar == avatarPic && availableAvatars.Count > 1);
+
+        return newAvatar;
+    }
+
+    private async Task SetAvatarAsync(string newAvatar)
+    {
+        avatarPic = newAvatar;
+        await localStorage.SetItemAsync("AvatarPic", avatarPic);
+    }
+
+
+    private async Task JoinGame()
+    {
+        var normalizedLobbyCode = lobbyCode.Trim();
+        var normalizedPlayerName = playerName.Trim();
+
+        if (string.IsNullOrWhiteSpace(normalizedLobbyCode) ||
+            string.IsNullOrWhiteSpace(normalizedPlayerName))
+        {
+            JoinError = "Please enter lobby code and username.";
+            return;
+        }
+
+        JoinError = string.Empty;
+        
+        var player = new PlayerDTO(
+            PlayerId: null,
+            Name: normalizedPlayerName,
+            Points: 0,
+            AvaterPic: avatarPic
+        );
+
+        try
+        {
+            var joinedPlayer = await playerHub.JoinLobby(normalizedLobbyCode, player);
+            if (string.IsNullOrWhiteSpace(joinedPlayer.PlayerId))
+            {
+                JoinError = "Lobby not found or not active.";
+                return;
+            }
+                
+            playerState.Set(joinedPlayer, normalizedLobbyCode);
+            await localStorage.RemoveItemAsync("PendingPlayerRoute");
+            
+            nm.NavigateTo($"/lobby/{normalizedLobbyCode}/waiting");
+        }
+        catch (Exception ex)
+        {
+            JoinError = "Could not join lobby.";
+        }
+    }
+}
+
+
+

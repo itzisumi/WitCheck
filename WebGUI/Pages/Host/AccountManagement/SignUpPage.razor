@@ -1,0 +1,84 @@
+@page "/SignUpPage"
+@using Database
+@using WebGUI.DTOs
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@using APICaller.API
+@inject UserCaller uac
+@inject LobbyCaller lac
+
+<div class="login-page">
+    <a href="/" class="back-arrow">
+        <span></span>
+    </a>
+    
+    <div class="login-left">
+        <h1 class="side-brand">WitCheck</h1>
+        <p class="side-text">Join the game. Create your account now!</p>
+    </div>
+
+    <div class="login-right">
+        <div class="form-header">
+            <img src="images/Logo.png" alt="WitCheck Logo" class="form-logo"/>
+            <h1 class="form-title">Sign Up</h1>
+        </div>
+
+        <form class="login-form">
+            <input type="email" placeholder="Enter Email" @bind="email"class="input-field"/>
+
+            <div style="display:flex; gap:1rem;">
+                <input type="text" placeholder="Enter Firstname" @bind="firstname"class="input-field"/>
+                <input type="text" placeholder="Enter Lastname" @bind="lastname"class="input-field"/>
+            </div>
+
+            <input type="text" placeholder="Enter Username" @bind="username"class="input-field"/>
+
+            <div class="password-container">
+                <input type="@(_showPassword ? "text" : "password")"
+                       placeholder="Enter Password"
+                       @bind="password"
+                       class="input-field"/>
+                <img src="images/view.png"
+                     alt="Toggle Password"
+                     class="toggle-password"
+                     @onclick="TogglePassword"/>
+            </div>
+
+            <button type="button" class="btn primary" @onclick="CreateUser">Sign Up</button>
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <p style="color:red;">@_errorMessage</p>
+            }
+        </form>
+    </div>
+</div>
+
+@code {
+    private bool _showPassword = false;
+    private string firstname;
+    private string lastname;
+    private string email;
+    private string password;
+    private string username;
+    private string _errorMessage;
+
+    private void TogglePassword()
+    {
+        _showPassword = !_showPassword;
+    }
+
+    private async Task CreateUser()
+    {
+        _errorMessage = null;
+        try
+        {
+            UserDTO userDto = new UserDTO(0, firstname, lastname, username, email);
+            var uID = await uac.CreateUser(userDto, password);
+            nm.NavigateTo("/LoginPage");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Registration failed: {ex.Message}";
+        }
+    }
+}

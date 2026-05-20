@@ -1,0 +1,44 @@
+services:
+  mysql:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: witcheck
+      MYSQL_DATABASE: witcheck
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./witcheck_init.sql:/docker-entrypoint-initdb.d/witcheck_init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pwitcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+  api:
+    build:
+      context: .
+      dockerfile: APIServer/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5203:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__WitCheck: "server=mysql;port=3306;database=witcheck;user id=root;password=witcheck"
+      AllowedOrigin: "http://localhost:5049"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  # WebGUI (Blazor WASM via nginx)
+  webgui:
+    build:
+      context: .
+      dockerfile: WebGUI/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5049:80"
+    depends_on:
+      - api
+
+volumes:
+  mysql_data:

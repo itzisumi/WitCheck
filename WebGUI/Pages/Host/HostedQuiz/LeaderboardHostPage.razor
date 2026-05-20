@@ -1,0 +1,154 @@
+@page "/lobby/{LobbyCode}/leaderboard/host"
+@using WebGUI.DTOs
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@using APICaller.API
+@using APICaller.Hub
+@using Shared
+@inject UserCaller uac
+@inject LobbyCaller lac
+@inject QuizCaller qc
+@inject HostHubCaller hostHub
+
+<div class="leaderboard-page">
+    <div class="quiz-header">
+        <h1 class="quiz-title">LEADERBOARD</h1>
+        <img src="images/Logo.png" alt="Logo" class="quiz-logo" />
+    </div>
+
+    
+    <div class="leaderboard-container">
+        @foreach (var entry in players.Take(7))  
+        {
+            var rank = players.IndexOf(entry) + 1;
+            <div class="leaderboard-row @(rank == 1 ? "first" : rank == 2 ? "second" : rank == 3 ? "third" : "")">
+                <div class="rank">#@rank</div>
+                <div class="avatar">
+                    <img src="@(!string.IsNullOrEmpty(entry.AvaterPic) ? entry.AvaterPic : "images/avatar-placeholder.png")" alt="Avatar" />
+                </div>
+                <div class="name">@entry.Name</div>
+                <div class="points">@entry.Points pts</div>
+            </div>
+        }
+    </div>
+
+    <div class="footer">
+        <button class="next-btn" @onclick="NextQuestion">Next Question</button>
+
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string LobbyCode { get; set; } = string.Empty;
+    [Parameter] public string LobbyId { get; set; } = string.Empty;
+
+    private UserDTO _user = default!;
+    private List<PlayerDTO> players = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LobbyCode))
+        {
+            LobbyCode = await localStorage.GetItemAsync<string>("LobbyCode") ?? string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(LobbyCode))
+        {
+            nm.NavigateTo("/");
+            return;
+        }
+
+        LobbyId = LobbyCode;
+        await LoadUser();
+        await LoadPlayers();
+        await InitHubAsync();
+    }
+
+    private async Task InitHubAsync()
+    {
+        await hostHub.StartHub();
+        
+        hostHub.PlayerLeave(async _ =>
+        {
+            await LoadPlayers();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadUser()
+    {
+        try
+        {
+            var userId = await localStorage.GetItemAsync<int>("UserID");
+
+            if (userId == 0)
+            {
+                throw new Exception("Not logged in before!");
+            }
+             
+
+            _user = await uac.GetUserById(userId);
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    
+    private async Task LoadPlayers()
+    {
+        try
+        {
+            
+            var result = await lac.GetAllPlayers(LobbyId);
+
+            players = result?
+                .OrderByDescending(p => p.Points)
+                .ToList()
+                ?? new List<PlayerDTO>();
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+    private async Task NextQuestion()
+    {
+        try
+        {
+            var password = await localStorage.GetItemAsync<string>("Password") ?? string.Empty;
+            
+            var question = await hostHub.NextQuestion( new LoginRequest(_user, password),LobbyCode);
+            if (question == null)
+            {
+                nm.NavigateTo($"/LeaderboardWithWinnersHostPage/{LobbyCode}");
+                return;
+            }
+
+            var login = new LoginRequest(_user, password);
+
+            var answers = (await qc.GetAnswerByQuestionId(question.QuestionId, login))
+                          ?.OrderBy(a => a.OrderNumber)
+                          .ToList();
+
+            if (answers == null || answers.Count == 0)
+            {
+                nm.NavigateTo($"/lobby/{LobbyCode}/leaderboard/host");
+                return;
+            }
+
+            if (answers.Count == 2)
+            {
+                nm.NavigateTo($"/lobby/{LobbyCode}/answers/host/tf");
+            }
+            else
+            {
+                nm.NavigateTo($"/lobby/{LobbyCode}/answers/host/mc");
+            }
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+}

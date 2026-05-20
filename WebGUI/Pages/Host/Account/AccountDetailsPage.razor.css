@@ -1,0 +1,155 @@
+.account-details-page {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    font-family: "brothers", sans-serif;
+}
+
+.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #f4f6f3;
+    padding: 3rem 2.5rem;
+    overflow-y: auto;
+}
+
+.title {
+    font-size: 2.6rem;
+    font-weight: 800;
+    color: #2f5d1d;
+    margin: 0 0 2rem 0;
+    width: 100%;
+    max-width: 560px;
+}
+
+/* Card */
+.details-card {
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2.5rem 2rem 2rem;
+    gap: 1.8rem;
+}
+
+/* Avatar */
+.avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #5BB933, #43a047);
+    color: white;
+    font-size: 2rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: 0.05em;
+    box-shadow: 0 4px 14px rgba(91, 185, 51, 0.4);
+    flex-shrink: 0;
+}
+
+/* Info section */
+.info-section {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.85rem 0.4rem;
+    gap: 1rem;
+}
+
+.info-label {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    min-width: 110px;
+}
+
+.info-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f2937;
+    font-family: "hagrid-text", sans-serif;
+    text-align: right;
+    word-break: break-all;
+}
+
+.divider {
+    height: 1px;
+    background: #e5e7eb;
+    width: 100%;
+}
+
+/* Action buttons row */
+.card-actions {
+    display: flex;
+    gap: 0.8rem;
+    width: 100%;
+    justify-content: flex-end;
+}
+
+.btn {
+    padding: 0.65rem 1.3rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-family: "brothers", sans-serif;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary {
+    background: #fff;
+    color: #5BB933;
+    border: 2px solid #5BB933;
+}
+
+.btn-secondary:hover {
+    background: #5BB933;
+    color: white;
+    box-shadow: 0 4px 12px rgba(91, 185, 51, 0.3);
+}
+
+.btn-danger {
+    background: linear-gradient(145deg, #e53935, #b71c1c);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: linear-gradient(145deg, #ef5350, #b71c1c);
+    box-shadow: 0 4px 12px rgba(229, 57, 53, 0.35);
+}
+
+@media (max-width: 600px) {
+    .content {
+        padding: 1.5rem 1rem;
+    }
+
+    .title {
+        font-size: 1.8rem;
+    }
+
+    .card-actions {
+        flex-direction: column;
+    }
+
+    .btn {
+        width: 100%;
+        text-align: center;
+    }
+}

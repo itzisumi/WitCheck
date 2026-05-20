@@ -1,0 +1,144 @@
+.leaderboard-page {
+    height: 100vh;
+    background: radial-gradient(circle at 20% 30%, rgba(200, 255, 150, 0.4), transparent 70%),
+    radial-gradient(circle at 80% 70%, rgba(150, 255, 200, 0.4), transparent 60%),
+    linear-gradient(160deg, #8AAB00, #5BB933, #C8F1A5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    font-family: "hagrid-text", sans-serif;
+    color: #fff;
+    overflow: hidden;
+}
+
+.quiz-header {
+    text-align: center;
+    margin-top: 3rem;
+}
+
+.quiz-title {
+    font-family: "Brothers OT", sans-serif;
+    font-size: 3.2rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #fff;
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+}
+
+.quiz-logo {
+    width: 120px;
+    height: auto;
+    margin-top: 0.5rem;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+    100% { transform: translateY(0); }
+}
+
+.leaderboard-container {
+    width: 80%;
+    max-width: 900px;
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    animation: fadeIn 1s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.leaderboard-row {
+    display: grid;
+    grid-template-columns: 0.5fr 1fr 3fr 1fr;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(8px);
+    padding: 0.8rem 1.5rem;
+    border-radius: 20px;
+    font-size: 1.5rem;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s ease, background 0.3s ease;
+}
+
+.leaderboard-row:hover {
+    transform: scale(1.02);
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.avatar img {
+    width: 55px;
+    height: 55px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 0 12px rgba(0,0,0,0.25);
+}
+
+.rank {
+    font-weight: 700;
+    font-size: 1.4rem;
+    text-align: center;
+    color: #fff;
+}
+
+.name {
+    font-size: 1.6rem;
+    font-weight: 600;
+    text-align: left;
+}
+
+.points {
+    text-align: right;
+    font-weight: 600;
+}
+
+.first {
+    background: linear-gradient(145deg, #fff176, #fbc02d);
+    color: #1E1E1E;
+    font-weight: 700;
+    box-shadow: 0 0 30px rgba(255, 241, 118, 0.5);
+}
+
+.second {
+    background: linear-gradient(145deg, #e0e0e0, #bdbdbd);
+    color: #1E1E1E;
+    font-weight: 600;
+    box-shadow: 0 0 25px rgba(200, 200, 200, 0.4);
+}
+
+.third {
+    background: linear-gradient(145deg, #ffcc80, #f57c00);
+    color: #1E1E1E;
+    font-weight: 600;
+    box-shadow: 0 0 25px rgba(255, 183, 77, 0.5);
+}
+
+.footer {
+    margin-bottom: 2rem;
+}
+
+.next-btn {
+    padding: 1.2rem 3rem;
+    background: linear-gradient(135deg, #1E1E1E, #333333);
+    color: #fff;
+    font-size: 1.3rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.35);
+    transition: all 0.3s ease;
+    letter-spacing: 1px;
+}
+
+.next-btn:hover {
+    background: linear-gradient(135deg, #333333, #555555);
+    transform: scale(1.05);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}

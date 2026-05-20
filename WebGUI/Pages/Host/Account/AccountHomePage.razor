@@ -1,0 +1,66 @@
+@page "/AccountHomePage"
+@using WebGUI.DTOs
+@using WebGUI.Pages.SharedLayouts
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@using APICaller.API
+@inject UserCaller uac
+@inject LobbyCaller lac
+
+<div class="account-home">
+    <Sidebar />   
+
+    <div class="content">
+        <h1 class="welcome">Welcome, @UserName!</h1>
+
+        <div class="action-card">
+            <button @onclick="CreateQuizRedirect" class="btn primary">Create Quiz</button>
+            <button @onclick="HostQuizRedirect" class="btn secondary">Host Lobby</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string UserName { get; set; } = "User";
+    UserDTO? _user;
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var userId = await localStorage.GetItemAsync<int>("UserID");
+            if (userId > 0)
+            {
+                _user = await uac.GetUserById(userId);
+                if (_user != null)
+                {
+                    var displayName = _user.Username;
+                    if (string.IsNullOrWhiteSpace(displayName))
+                    {
+                        var first = _user.Firstname ?? string.Empty;
+                        var last = _user.Lastname ?? string.Empty;
+                        displayName = $"{first} {last}".Trim();
+                    }
+
+                    UserName = string.IsNullOrWhiteSpace(displayName) ? "User" : displayName;
+                }
+            }
+            else
+            {
+                throw new Exception("Not logged in before!");
+            }
+        }
+        catch(Exception ex)
+        {
+        }
+    }
+
+    private async Task CreateQuizRedirect()
+    {
+        nm.NavigateTo("/CreatingQuizPage");
+    }
+
+    private async Task HostQuizRedirect()
+    {
+        nm.NavigateTo("/OwnedQuizPage");
+    }
+}

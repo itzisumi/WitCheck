@@ -1,0 +1,149 @@
+@page "/LeaderboardWithWinnersHostPage/{LobbyId}"
+@using WebGUI.DTOs
+@using APICaller.API
+@using Shared
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject UserCaller uac
+@inject LobbyCaller lac
+
+<div class="winner-page">
+    <div class="quiz-header">
+        <h1 class="quiz-title">FINAL LEADERBOARD</h1>
+        <img src="images/Logo.png" alt="Trophy" class="quiz-trophy" />
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="main-content">
+            <div class="podium-wrapper">
+                <div class="winner-name">Loading leaderboard...</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        var firstPlace = GetWinnerOrPlaceholder(0);
+        var secondPlace = GetWinnerOrPlaceholder(1);
+        var thirdPlace = GetWinnerOrPlaceholder(2);
+
+        <div class="main-content">
+            <div class="podium-wrapper">
+
+                <div class="podium second">
+                    <div class="avatar">
+                        <img src="@GetAvatar(secondPlace)" alt="@secondPlace.Name avatar" />
+                        <div class="winner-name">@secondPlace.Name</div>
+                    </div>
+                    <div class="podium-box">
+                        <div class="rank-text">#2</div>
+                        <div class="winner-points">@secondPlace.Points pts</div>
+                    </div>
+                </div>
+
+                <div class="podium first">
+                    <div class="avatar">
+                        <img src="@GetAvatar(firstPlace)" alt="@firstPlace.Name avatar" />
+                        <div class="winner-name">@firstPlace.Name</div>
+                    </div>
+                    <div class="podium-box">
+                        <div class="rank-text">#1</div>
+                        <div class="winner-points">@firstPlace.Points pts</div>
+                    </div>
+                </div>
+
+                <div class="podium third">
+                    <div class="avatar">
+                        <img src="@GetAvatar(thirdPlace)" alt="@thirdPlace.Name avatar" />
+                        <div class="winner-name">@thirdPlace.Name</div>
+                    </div>
+                    <div class="podium-box">
+                        <div class="rank-text">#3</div>
+                        <div class="winner-points">@thirdPlace.Points pts</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="side-buttons">
+                <button class="action-btn" @onclick="GoToAccount">Back to Account</button>
+                <button class="action-btn" @onclick="HostAgain">Host Again</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string LobbyId { get; set; } = default!;
+
+    private const string FallbackAvatar = "images/user.png";
+
+    private UserDTO _user = default!;
+    private bool isLoading = true;
+    private List<PlayerDTO> winners = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var userId = await localStorage.GetItemAsync<int>("UserID");
+            if (userId == 0)
+                throw new Exception("Not logged in");
+
+            _user = await uac.GetUserById(userId);
+            
+            var players = await lac.GetAllPlayers(LobbyId);
+
+            winners = players
+                .OrderByDescending(p => p.Points)
+                .Take(3)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private PlayerDTO GetWinnerOrPlaceholder(int index)
+    {
+        if (index >= 0 && index < winners.Count)
+        {
+            return winners[index];
+        }
+
+        return new PlayerDTO(null, "-", 0, FallbackAvatar);
+    }
+
+    private static string GetAvatar(PlayerDTO player) =>
+        string.IsNullOrWhiteSpace(player.AvaterPic) ? FallbackAvatar : player.AvaterPic;
+
+    private async Task GoToAccount()
+    {
+        await TryDeleteLobbyAsync();
+        nm.NavigateTo("/AccountHomePage");
+    }
+
+    private async Task HostAgain()
+    {
+        await TryDeleteLobbyAsync();
+        nm.NavigateTo("/OwnedQuizPage");
+    }
+
+    private async Task TryDeleteLobbyAsync()
+    {
+        try
+        {
+            var password = await localStorage.GetItemAsync<string>("Password") ?? string.Empty;
+            var login = new LoginRequest(_user, password);
+            await lac.DeleteLobby(LobbyId, login);
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+}

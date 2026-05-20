@@ -1,0 +1,293 @@
+@page "/MultipleChoiceAnswers/{LobbyCode}"
+@page "/MultipleChoiceAnswers"
+@implements IDisposable
+@using APICaller.API
+@using APICaller.Hub
+@using Shared
+@using WebGUI.DTOs
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject LobbyCaller lac
+@inject UserCaller uac
+@inject QuizCaller qc
+@inject PlayerHubCaller playerHub
+@inject QuestionTimerService questionTimer
+@inject WebGUI.Services.PlayerStateService playerState
+
+<div class="seeanswers-page">
+
+    <div class="answers-grid">
+        @for (int i = 0; i < answers.Count; i++)
+        {
+            var index = i;
+            <button type="button"
+                    class="answer-box @(selectedAnswerIndex == index ? "selected" : "")"
+                    style="background-color:@GetAnswerColor(index);"
+                    aria-label="@answers[index].Answer1"
+                    disabled="@navigating"
+                    @onclick="() => OnAnswerClick(index)">
+            </button>
+        }
+    </div>
+
+</div>
+
+@code {
+    [Parameter]
+    public string LobbyCode { get; set; } = string.Empty;
+
+    private QuizDTO? quiz;
+    private List<AnswerDTO> answers = new();
+    private string? PlayerId;
+    private string questionText = "Question";
+    private int? selectedAnswerIndex;
+    private int timeLeft = QuestionTimerService.DefaultSeconds;
+    private bool navigating;
+    private IDisposable? finishedQuestionSubscription;
+    private static readonly string[] AnswerColors = ["#ff6b6b", "#4dabf7", "#ffd43b", "#51cf66"];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LobbyCode))
+        {
+            nm.NavigateTo("/JoinPageWithCode");
+            return;
+        }
+
+        PlayerId = playerState.PlayerId;
+
+        if (string.IsNullOrWhiteSpace(PlayerId))
+        {
+            nm.NavigateTo("/JoinPageWithCode");
+            return;
+        }
+
+        playerState.ClearLastQuestionResult();
+
+        questionTimer.Stop();
+        questionTimer.Changed += HandleTimerChanged;
+        questionTimer.Completed += HandleTimerCompleted;
+        SyncTimeLeft();
+
+        await LoadQuestionAndAnswersAsync();
+        await InitHubAsync();
+    }
+
+    private async Task OnAnswerClick(int index)
+    {
+        if (navigating || index < 0 || index >= answers.Count)
+            return;
+
+        selectedAnswerIndex = index;
+        navigating = true;
+        questionTimer.Stop();
+        SyncTimeLeft();
+        StateHasChanged();
+
+        await localStorage.SetItemAsync("SelectedAnswerId", answers[index].AnswerId);
+        await localStorage.SetItemAsync("SelectedAnswerTimeLeft", timeLeft);
+
+        await Task.Delay(350);
+        await InvokeAsync(() => nm.NavigateTo($"/WaitingForOtherAnswers/{LobbyCode}"));
+    }
+
+    public void Dispose()
+    {
+        questionTimer.Changed -= HandleTimerChanged;
+        questionTimer.Completed -= HandleTimerCompleted;
+        questionTimer.Stop();
+        finishedQuestionSubscription?.Dispose();
+    }
+
+    private async Task LoadQuestionAndAnswersAsync()
+    {
+        var countdownSeconds = QuestionTimerService.DefaultSeconds;
+
+        try
+        {
+            var question = await lac.GetQuestion(LobbyCode);
+            if (question != null && question.Time > 0)
+            {
+                countdownSeconds = question.Time;
+            }
+
+            if (!string.IsNullOrWhiteSpace(question?.QuestionText))
+            {
+                questionText = question.QuestionText;
+            }
+
+            await LoadQuizAsync(question);
+
+            var answersResult = (await lac.GetAllAnswers(LobbyCode))
+                ?.Where(answer => answer != null)
+                .OrderBy(answer => answer.OrderNumber)
+                .ToList();
+
+            if (answersResult?.Count > 0)
+            {
+                answers = answersResult;
+            }
+        }
+        catch (Exception ex)
+        {
+        }
+        finally
+        {
+            questionTimer.Start(countdownSeconds);
+            SyncTimeLeft();
+        }
+    }
+
+    private async Task LoadQuizAsync(QuestionDTO? question)
+    {
+        if (question == null)
+            return;
+
+        var userId = await localStorage.GetItemAsync<int?>("UserID");
+        var password = await localStorage.GetItemAsync<string>("Password");
+        if (userId == null || string.IsNullOrWhiteSpace(password))
+            return;
+
+        try
+        {
+            var user = await uac.GetUserById(userId.Value);
+            var login = new LoginRequest
+            {
+                userdto = user,
+                password = password
+            };
+
+            var loadedQuiz = await qc.GetQuiz(question.QuizId, login);
+            if (loadedQuiz != null)
+            {
+                quiz = loadedQuiz;
+            }
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private async Task InitHubAsync()
+    {
+        await playerHub.Start();
+
+        finishedQuestionSubscription = playerHub.FinishedQuestion(async (bool _) =>
+        {
+            await HandleFinishedQuestionAsync();
+        });
+    }
+
+    private async Task StoreNoAnswerAsync()
+    {
+        await localStorage.SetItemAsync("SelectedAnswerId", -1);
+        await localStorage.SetItemAsync("SelectedAnswerTimeLeft", 0);
+    }
+
+    private void HandleTimerChanged()
+    {
+        SyncTimeLeft();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleTimerCompleted()
+    {
+        _ = InvokeAsync(HandleQuestionTimeoutAsync);
+    }
+
+    private async Task HandleQuestionTimeoutAsync()
+    {
+        if (navigating)
+            return;
+
+        navigating = true;
+        questionTimer.Stop();
+        SyncTimeLeft();
+
+        await localStorage.RemoveItemAsync("QuestionAlreadyFinished");
+        await StoreNoAnswerAsync();
+        await StoreResultSnapshotAsync(-1);
+        nm.NavigateTo($"/OwnPointsToAnswer/{LobbyCode}");
+    }
+
+    private async Task HandleFinishedQuestionAsync()
+    {
+        if (navigating)
+        {
+            await localStorage.SetItemAsync("QuestionAlreadyFinished", true);
+            return;
+        }
+
+        navigating = true;
+        questionTimer.Stop();
+        SyncTimeLeft();
+
+        var lastAnswerId = await PersistAnswerStateAsync();
+        await StoreResultSnapshotAsync(lastAnswerId);
+        nm.NavigateTo($"/OwnPointsToAnswer/{LobbyCode}");
+    }
+
+    private async Task<int> PersistAnswerStateAsync()
+    {
+        var selectedAnswerId = await localStorage.GetItemAsync<int?>("SelectedAnswerId");
+        var selectedAnswerTimeLeft = await localStorage.GetItemAsync<int?>("SelectedAnswerTimeLeft");
+
+        if (selectedAnswerId == null || selectedAnswerTimeLeft == null)
+        {
+            await StoreNoAnswerAsync();
+            return -1;
+        }
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(PlayerId))
+            {
+                await lac.AnswerQuestion(LobbyCode, PlayerId, selectedAnswerId.Value, selectedAnswerTimeLeft.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+        }
+        finally
+        {
+            await localStorage.RemoveItemAsync("SelectedAnswerId");
+            await localStorage.RemoveItemAsync("SelectedAnswerTimeLeft");
+        }
+
+        return selectedAnswerId.Value;
+    }
+
+    private async Task StoreResultSnapshotAsync(int lastAnswerId)
+    {
+        if (string.IsNullOrWhiteSpace(PlayerId))
+            return;
+
+        try
+        {
+            var correctAnswerIds = (await lac.GetQuestionAnswer(LobbyCode))
+                ?.Select(answer => answer.AnswerId)
+                .ToList()
+                ?? new List<int>();
+
+            var points = await lac.GetPlayerPoints(LobbyCode, PlayerId);
+            var isCorrect = lastAnswerId != -1 && correctAnswerIds.Contains(lastAnswerId);
+            playerState.SetLastQuestionResult(isCorrect, points);
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private void SyncTimeLeft()
+    {
+        timeLeft = questionTimer.TimeLeft;
+    }
+
+    private string GetQuizHeaderStyle()
+    {
+        var quizColor = quiz?.ColorCode ?? "#5BB933";
+        return $"background-color:{quizColor};color:{QuizColorHelper.GetReadableTextColor(quizColor)};--quiz-header-text-shadow:{QuizColorHelper.GetReadableTextShadow(quizColor)};";
+    }
+
+    private static string GetAnswerColor(int index) => AnswerColors[index % AnswerColors.Length];
+}

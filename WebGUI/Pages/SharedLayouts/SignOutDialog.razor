@@ -1,0 +1,32 @@
+<div class="@OverlayClass">
+    <div class="signout-modal">
+        <h2>Confirm Sign Out</h2>
+
+        <p>Are you sure you want to sign out?</p>
+
+        <div class="dialog-buttons">
+            <button class="btn-cancel" @onclick="StaySignedIn">Stay Signed In</button>
+            <button class="btn-danger" @onclick="ConfirmSignOut">Sign Out</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public EventCallback OnSignOutConfirmed { get; set; }
+
+    private string OverlayClass =>
+        IsOpen ? "signout-overlay" : "signout-overlay hidden";
+
+    private async Task StaySignedIn()
+    {
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    private async Task ConfirmSignOut()
+    {
+        await OnSignOutConfirmed.InvokeAsync();
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}

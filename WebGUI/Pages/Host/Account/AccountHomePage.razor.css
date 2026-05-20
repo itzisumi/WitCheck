@@ -1,0 +1,75 @@
+.account-home {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    font-family: "brothers", sans-serif;
+}
+
+.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #E8FCD9, #C8F1A5);
+    padding: 3rem;
+}
+
+.welcome {
+    font-size: 3rem;
+    font-weight: 800;
+    color: #2f5d1d;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.action-card {
+    background: #ffffff;
+    padding: 2.5rem 3.5rem;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    align-items: center;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.15);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.action-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 26px rgba(0,0,0,0.2);
+}
+
+.btn {
+    width: 240px;
+    padding: 1rem;
+    font-size: 1.2rem;
+    font-weight: 700;
+    border-radius: 12px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.25s ease;
+}
+
+.btn.primary {
+    background: linear-gradient(145deg, #5BB933, #43a047);
+    color: white;
+}
+
+.btn.primary:hover {
+    background: linear-gradient(145deg, #6cd942, #43a047);
+    transform: scale(1.05);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+}
+
+.btn.secondary {
+    background: white;
+    color: #5BB933;
+    border: 2px solid #5BB933;
+}
+
+.btn.secondary:hover {
+    background: #5BB933;
+    color: white;
+    transform: scale(1.05);
+}

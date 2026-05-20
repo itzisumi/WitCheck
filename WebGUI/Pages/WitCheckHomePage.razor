@@ -1,0 +1,91 @@
+@page "/"
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+<div class="home-container">
+  <div class="question-bg">
+    <svg class="qmark q1" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+                 c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+                 C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#8AAB00"/>
+    </svg>
+
+    <svg class="qmark q2" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+                 c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+                 C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#A6E85C"/>
+    </svg>
+
+    <svg class="qmark q3" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+                 c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+                 C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#5BB933"/>
+    </svg>
+
+    <svg class="qmark q4" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+                 c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+                 C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#8AAB00"/>
+    </svg>
+
+    <svg class="qmark q5" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+                 c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+                 C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#5BB933"/>
+    </svg>
+
+    <svg class="qmark q6" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+                 c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+                 C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#A6E85C"/>
+    </svg>
+    <svg class="qmark q7" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+             c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+             C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#A6E85C"/>
+    </svg>
+    <svg class="qmark q8" viewBox="0 0 64 64">
+        <path d="M31.8 8c8 0 15 6 15 13.5s-6 11.5-10 15c-2.5 2.3-3 3.7-3 6.5v3.5h-7v-4
+             c0-3.5 1-6 3.5-8.5 4.5-4.2 9.5-7 9.5-12.5 0-4.5-3.5-8-8.5-8s-8.8 3.8-9.8 9h-7.5
+             C14.5 15 21.8 8 31.8 8zM29 50h7v7h-7z"
+              fill="#A6E85C"/>
+    </svg>
+
+
+</div>
+    
+    <div class="hero">
+        <h1 class="hero-title">
+            <span>W</span><span>i</span><span>t</span><span>C</span><span>h</span><span>e</span><span>c</span><span>k</span>
+        </h1>
+        <img src="images/Logo.png" alt="WitCheck Logo" class="hero-logo" />
+
+        <div class="button-group">
+            <button class="quiz-btn" @onclick="NavigateToCreateQuiz">Create Quiz</button>
+            <button class="quiz-btn" @onclick="NavigateToHostLobby">Host Lobby</button>
+            <button class="quiz-btn" @onclick="NavigateToJoinLobby">Join Lobby</button>
+        </div>
+    </div>
+</div>
+
+@code {
+
+    public async Task NavigateToCreateQuiz()
+    {
+        nm.NavigateTo("./CreatingQuizPage");
+    }
+    public async Task NavigateToHostLobby()
+    {
+        nm.NavigateTo("./OwnedQuizPage");
+    }
+    public async Task NavigateToJoinLobby()
+    {
+        nm.NavigateTo("./JoinPageWithCode");
+    }
+}

@@ -1,0 +1,6 @@
+bin/
+obj/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+.idea/.idea.WitCheck/.idea/dataSources/83ff93ad-f253-4909-a163-bab29a7f2b15/storage_v2/_src_/schema/mysql.osA4Bg.meta

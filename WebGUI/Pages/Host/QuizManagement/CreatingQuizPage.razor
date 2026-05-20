@@ -1,0 +1,78 @@
+@page "/CreatingQuizPage"
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@using APICaller.API
+@using Microsoft.EntityFrameworkCore.ChangeTracking.Internal
+@using Shared
+@using WebGUI.DTOs
+@inject UserCaller uac
+@inject QuizCaller qac
+
+<div class="createquiz-page">
+    <div class="createquiz-left">
+        <img src="images/Logo.png" alt="WitCheck Logo" class="form-logo" />
+        <span class="side-brand">WitCheck</span>
+        <span class="side-text">Create your Quiz!</span>
+    </div>
+
+    <div class="createquiz-right">
+        <a href="/" class="back-arrow">
+            <span></span>
+        </a>
+
+        <div class="form-header">
+            <h2 class="form-title">New Quiz</h2>
+        </div>
+
+        <form class="quiz-form">
+            <input type="text" class="input-field" placeholder="Enter the quiz name"
+                   @bind="QuizName" />
+
+            <div class="color-picker">
+                <label class="color-label">Choose a color:</label>
+                <input type="color" class="color-input" @bind="QuizColor" />
+            </div>
+
+            <button type="button" class="btn primary" @onclick="CreateQuiz">Create</button>
+        </form>
+    </div>
+</div>
+
+@code {
+    private string QuizName { get; set; } = string.Empty;
+    private string QuizColor { get; set; } = "#5BB933"; 
+    QuizDTO quizdto { get; set; }
+    private async Task CreateQuiz()
+    {
+        quizdto = new QuizDTO(0, QuizName, await localStorage.GetItemAsync<int>("UserID"), QuizColor);
+        try
+        {
+            await qac.AddQuiz(new LoginRequest<QuizDTO>(){extrainfo = quizdto,password=await localStorage.GetItemAsync<string>("Password"),userdto= _user});
+            nm.NavigateTo("/OwnedQuizPage");
+        }
+        catch (Exception ex)
+        {
+            throw ex;
+        }
+    }
+    private UserDTO _user;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = await localStorage.GetItemAsync<int>("UserID");
+        if (userId == 0)
+        {
+            nm.NavigateTo("/LoginPage");
+            return;
+        }
+
+        try
+        {
+            _user = await uac.GetUserById(userId);
+        }
+        catch (Exception ex)
+        {
+            nm.NavigateTo("/LoginPage");
+        }
+    }
+}

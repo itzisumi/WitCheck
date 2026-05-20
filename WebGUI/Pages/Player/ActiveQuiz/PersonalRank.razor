@@ -1,0 +1,136 @@
+@page "/PersonalPlace/{LobbyCode}"
+@page "/PersonalPlace"
+@implements IDisposable
+@using APICaller.API
+@using APICaller.Hub
+@using WebGUI.DTOs
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject LobbyCaller lac
+@inject PlayerHubCaller playerHub
+@inject WebGUI.Services.PlayerStateService playerState
+
+<div class="personal-place">
+    <h1 class="place-title">You Ranked @GetRankSuffix(place)</h1>
+
+    <div class="avatar-wrapper">
+        <div class="avatar">
+            <img src="@player.AvaterPic" alt="Avatar" />
+            <div class="player-name">@player.Name</div>
+        </div>
+    </div>
+
+    <div class="rank-bar">
+        <span class="points-text">@player.Points POINTS</span>
+    </div>
+
+    <button class="leave-btn" @onclick="LeaveLobby">Leave Lobby</button>
+</div>
+
+@code {
+    [Parameter]
+    public string LobbyCode { get; set; } = string.Empty;
+
+    // PlayerDTO player = new(
+    //     PlayerId: null,
+    //     Name: "Laura",
+    //     Points: 2450,
+    //     AvaterPic: "images/avatars/image1.jpg"
+    // );
+    private PlayerDTO player = new(null, "", 0);
+    private int place = 1;
+    private string? PlayerId;
+    private IDisposable? nextQuestionSubscription;
+    private IDisposable? gameOverSubscription;
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(LobbyCode))
+            {
+                LobbyCode = playerState.LobbyCode ?? string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(LobbyCode))
+                throw new Exception("Missing lobby context");
+
+            PlayerId = playerState.PlayerId;
+
+            if (string.IsNullOrWhiteSpace(PlayerId))
+                throw new Exception("Missing player or lobby context");
+
+            var players = (await lac.GetAllPlayers(LobbyCode))
+                          ?.OrderByDescending(p => p.Points)
+                          .ToList()
+                          ?? throw new Exception("No players found");
+
+            player = players.First(p => p.PlayerId == PlayerId);
+            place = players.IndexOf(player) + 1;
+
+            await InitHubAsync();
+        }
+        catch
+        {
+            nm.NavigateTo("/");
+        }
+    }
+
+
+    private string GetRankSuffix(int num)
+    {
+        if (num % 100 is 11 or 12 or 13)
+            return $"{num}th";
+
+        return (num % 10) switch
+        {
+            1 => $"{num}st",
+            2 => $"{num}nd",
+            3 => $"{num}rd",
+            _ => $"{num}th"
+        };
+    }
+    private void LeaveLobby()
+    {
+        playerState.Clear();
+        nm.NavigateTo("/");
+    }
+
+    private async Task InitHubAsync()
+    {
+        await playerHub.Start();
+
+        nextQuestionSubscription = playerHub.NextQuestion(async (question, player) =>
+        {
+            if (player != null)
+            {
+                playerState.UpdatePlayer(player);
+                PlayerId = player.PlayerId;
+            }
+            nm.NavigateTo(await ResolveQuestionRouteAsync(question));
+        });
+
+        gameOverSubscription = playerHub.GameOver(() =>
+        {
+          
+        });
+    }
+
+    private async Task<string> ResolveQuestionRouteAsync(QuestionDTO? question)
+    {
+        try
+        {
+            return await QuestionRouteHelper.ResolvePlayerProgressRouteAsync(lac, LobbyCode, question);
+        }
+        catch (Exception ex)
+        {
+        }
+
+        return $"/MultipleChoiceAnswers/{LobbyCode}";
+    }
+
+    public void Dispose()
+    {
+        nextQuestionSubscription?.Dispose();
+        gameOverSubscription?.Dispose();
+    }
+}

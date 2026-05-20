@@ -1,0 +1,215 @@
+@page "/lobby/{LobbyCode}/waiting"
+@implements IDisposable
+@using WebGUI.DTOs
+@using APICaller.API
+@using APICaller.Hub
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject LobbyCaller lac
+@inject PlayerHubCaller playerHub
+@inject WebGUI.Services.PlayerStateService playerState
+
+<div class="waitforplayers-page">
+    <header class="quiz-header" style="background-color:@HeaderColor">
+        <img src="images/Logo.png" alt="WitCheck Logo" class="quiz-logo-left" />
+        <h1 class="quiz-title">Waiting for Players</h1>
+    </header>
+
+    <div class="line-wrapper">
+        <hr class="divider" />
+        <div class="playercount">@($"{Players.Count}/40 joined")</div>
+    </div>
+
+
+    <div class="lobby-status">
+        @StatusText
+    </div>
+
+    <footer class="footer">
+        <button class="leave-btn" @onclick="LeaveLobby">Leave Lobby</button>
+    </footer>
+</div>
+
+@code {
+    private List<PlayerDTO> Players = new();
+    [Parameter]
+    public string LobbyCode { get; set; } = string.Empty;
+    private string? PlayerId;
+    private string StatusText = "Waiting for others...";
+    private string HeaderColor = "#5BB933";
+    private IDisposable? _startGameSubscription;
+    private IDisposable? _nextQuestionSubscription;
+    private IDisposable? _kickSubscription;
+    private bool _navigating;
+    private CancellationTokenSource _refreshCts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        LobbyCode = LobbyCode.Trim();
+        if (string.IsNullOrWhiteSpace(LobbyCode))
+        {
+            nm.NavigateTo("/JoinPageWithCode");
+            return;
+        }
+
+        PlayerId = playerState.PlayerId;
+        if (string.IsNullOrWhiteSpace(PlayerId))
+        {
+            nm.NavigateTo("/JoinPageWithCode");
+            return;
+        }
+
+        if (await TryNavigateFromPendingRouteAsync())
+        {
+            return;
+        }
+
+        await InitHubAsync();
+        await LoadHeaderColorAsync();
+
+        var loaded = await LoadPlayersAsync();
+        if (!loaded)
+        {
+            await localStorage.RemoveItemAsync("LobbyCode");
+            await localStorage.RemoveItemAsync("PlayerId");
+            nm.NavigateTo("/JoinPageWithCode");
+            return;
+        }
+
+        await TryNavigateFromPendingRouteAsync();
+        _ = PollPlayersAsync(_refreshCts.Token);
+    }
+
+    private async Task PollPlayersAsync(CancellationToken token)
+    {
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                await Task.Delay(1500, token);
+                if (token.IsCancellationRequested) break;
+
+                var latestPlayers = (await lac.GetAllPlayers(LobbyCode))?.ToList() ?? new List<PlayerDTO>();
+                await InvokeAsync(() =>
+                {
+                    Players = latestPlayers;
+                    StatusText = Players.Count < 40 ? "Waiting for others..." : "All players ready!";
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (TaskCanceledException) { }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private async Task LoadHeaderColorAsync()
+    {
+        try
+        {
+            var color = await lac.GetQuizColor(LobbyCode);
+            if (!string.IsNullOrWhiteSpace(color))
+            {
+                HeaderColor = color;
+            }
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+
+    private async Task<bool> LoadPlayersAsync()
+    {
+        try
+        {
+            Players = (await lac.GetAllPlayers(LobbyCode))?.ToList() ?? new();
+            StatusText = Players.Count < 40 ? "Waiting for others..." : "All players ready!";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            return false;
+        }
+    }
+
+    private async Task InitHubAsync()
+    {
+        await playerHub.Start();
+
+        _startGameSubscription?.Dispose();
+        _nextQuestionSubscription?.Dispose();
+        _kickSubscription?.Dispose();
+
+        _startGameSubscription = playerHub.StartGame(async question => await NavigateToAnswerPageAsync(question));
+        _nextQuestionSubscription = playerHub.NextQuestion(async (question, player) =>
+        {
+            if (player != null)
+                playerState.UpdatePlayer(player);
+            await NavigateToAnswerPageAsync(question);
+        });
+        _kickSubscription = playerHub.KickPlayer(() =>
+        {
+            _ = InvokeAsync(() => HandleKickAsync());
+        });
+    }
+
+    private async Task NavigateToAnswerPageAsync(QuestionDTO? question)
+    {
+        if (_navigating)
+        {
+            return;
+        }
+
+        _navigating = true;
+        var route = await ResolveQuestionRouteAsync(question);
+        await InvokeAsync(() => nm.NavigateTo(route));
+    }
+
+    private async Task<string> ResolveQuestionRouteAsync(QuestionDTO? question)
+    {
+        try
+        {
+            return await QuestionRouteHelper.ResolvePlayerProgressRouteAsync(lac, LobbyCode, question);
+        }
+        catch (Exception ex)
+        {
+        }
+
+        return $"/MultipleChoiceAnswers/{LobbyCode}";
+    }
+
+    private void HandleKickAsync()
+    {
+        StatusText = "You were removed from the lobby.";
+        playerState.Clear();
+        nm.NavigateTo("/", true);
+    }
+
+    private async Task LeaveLobby()
+    {
+        if (!string.IsNullOrWhiteSpace(PlayerId))
+        {
+            await playerHub.LeaveLobby(LobbyCode, PlayerId);
+        }
+
+        playerState.Clear();
+        nm.NavigateTo("/", true);
+    }
+
+    private Task<bool> TryNavigateFromPendingRouteAsync()
+    {
+        return Task.FromResult(false);
+    }
+
+    public void Dispose()
+    {
+        _refreshCts.Cancel();
+        _refreshCts.Dispose();
+        _startGameSubscription?.Dispose();
+        _nextQuestionSubscription?.Dispose();
+        _kickSubscription?.Dispose();
+    }
+
+}

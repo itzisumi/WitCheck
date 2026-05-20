@@ -1,0 +1,143 @@
+@page "/OwnPointsToAnswer/{LobbyCode}"
+@page "/OwnPointsToAnswer"
+@implements IDisposable
+@using APICaller.API
+@using APICaller.Hub
+@using WebGUI.DTOs
+@inject NavigationManager nm
+@inject LobbyCaller lac
+@inject PlayerHubCaller playerHub
+@inject WebGUI.Services.PlayerStateService playerState
+
+<div class="ownresult @(isCorrect ? "correct" : "wrong")">
+    <div class="result-content @(isCorrect ? "correct" : "wrong")">
+        <h1 class="result-title">@resultMessage</h1>
+        <p class="reaction-text">@reactionText</p>
+        <span class="points">@pointsDisplay</span>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string LobbyCode { get; set; } = string.Empty;
+
+    private string? PlayerId;
+    private bool isCorrect = true;
+    private string resultMessage = "Correct!";
+    private string reactionText = "Yay! You nailed it!";
+    private string pointsDisplay = "0 POINTS";
+    private IDisposable? nextQuestionSubscription;
+    private IDisposable? gameOverSubscription;
+    private bool navigating;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LobbyCode))
+        {
+            LobbyCode = playerState.LobbyCode ?? string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(LobbyCode))
+        {
+            nm.NavigateTo("/JoinPageWithCode");
+            return;
+        }
+
+        PlayerId = playerState.PlayerId;
+
+        if (string.IsNullOrWhiteSpace(PlayerId))
+        {
+            nm.NavigateTo("/JoinPageWithCode");
+            return;
+        }
+
+        await LoadResultAsync();
+        await InitHubAsync();
+    }
+
+    private async Task LoadResultAsync()
+    {
+        var snapshot = playerState.LastQuestionResult;
+
+        if (snapshot != null)
+        {
+            isCorrect = snapshot.IsCorrect;
+            if (snapshot.TotalPoints != null)
+            {
+                pointsDisplay = $"{snapshot.TotalPoints.Value} POINTS";
+            }
+        }
+
+        try
+        {
+            if (snapshot == null)
+            {
+                var lastIsCorrect = await lac.GetPlayerLastIsCorrect(LobbyCode, PlayerId!);
+                isCorrect = lastIsCorrect ?? false;
+            }
+
+            if (snapshot?.TotalPoints == null)
+            {
+                var points = await lac.GetPlayerPoints(LobbyCode, PlayerId!);
+                pointsDisplay = points != null ? $"{points.Value} POINTS" : "0 POINTS";
+            }
+        }
+        catch (Exception ex)
+        {
+        }
+
+        if (!isCorrect)
+        {
+            resultMessage = "Oops... Not quite!";
+            reactionText = "Boohoo!";
+        }
+    }
+
+    private async Task InitHubAsync()
+    {
+        await playerHub.Start();
+
+        nextQuestionSubscription = playerHub.NextQuestion(async (question, player) =>
+        {
+            if (navigating)
+                return;
+
+            navigating = true;
+            if (player != null)
+            {
+                playerState.UpdatePlayer(player);
+                PlayerId = player.PlayerId;
+            }
+            var route = await ResolveQuestionRouteAsync(question);
+            await InvokeAsync(() => nm.NavigateTo(route));
+        });
+
+        gameOverSubscription = playerHub.GameOver(async () =>
+        {
+            if (navigating)
+                return;
+
+            navigating = true;
+            await InvokeAsync(() => nm.NavigateTo($"/PersonalPlace/{LobbyCode}"));
+        });
+    }
+
+    private async Task<string> ResolveQuestionRouteAsync(QuestionDTO? question)
+    {
+        try
+        {
+            return await QuestionRouteHelper.ResolvePlayerProgressRouteAsync(lac, LobbyCode, question);
+        }
+        catch (Exception ex)
+        {
+        }
+
+        return $"/MultipleChoiceAnswers/{LobbyCode}";
+    }
+
+    public void Dispose()
+    {
+        nextQuestionSubscription?.Dispose();
+        gameOverSubscription?.Dispose();
+    }
+}

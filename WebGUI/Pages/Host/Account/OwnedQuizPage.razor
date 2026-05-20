@@ -1,0 +1,163 @@
+@page "/OwnedQuizPage"
+@using WebGUI.DTOs
+@using WebGUI.Pages.SharedLayouts
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@using APICaller.API
+@using Shared
+@inject UserCaller uac
+@inject LobbyCaller lac
+@inject QuizCaller qac
+<div class="myquiz-page">
+    <Sidebar />
+
+    <div class="content">
+        <div class="content-header">
+            <h1 class="title">My Quizzes</h1>
+            <a href="/CreatingQuizPage" class="create-btn" aria-label="Create a new quiz">
+                <span class="create-btn-icon">+</span>
+                <span class="create-btn-label">Create Quiz</span>
+            </a>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(StatusMessage))
+        {
+            <div class="status-message">@StatusMessage</div>
+        }
+
+        <div class="quiz-grid">
+            @if (Quizzes != null)
+            {
+                @foreach (var quiz in Quizzes)
+                {
+                    QuizDTO quiztemp = quiz;
+                    <div class="quiz-card">
+                        <div class="quiz-card-accent" style="background-color: @(quiz.ColorCode ?? "#5BB933");"></div>
+                        <div class="quiz-card-body">
+                            <div class="quiz-title">@quiz.Quizname</div>
+                            <div class="quiz-actions">
+                                <button @onclick="()=>HostQuiz(quiztemp)" class="btn primary">Host</button>
+                                <button @onclick="()=>EditQuiz(quiztemp)" class="btn secondary">Edit</button>
+                                <button @onclick="()=>DeleteQuiz(quiztemp)" class="btn danger">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<QuizDTO> Quizzes = new()
+    {
+    };
+    private UserDTO _user;
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = await localStorage.GetItemAsync<int?>("UserID");
+        var pass   = await localStorage.GetItemAsync<string>("Password");
+
+        if (!userId.HasValue || string.IsNullOrWhiteSpace(pass))
+        {
+            nm.NavigateTo("/LoginPage");
+            return;
+        }
+
+        _user = await uac.GetUserById(userId.Value);
+        Quizzes = (await uac.GetAllQuizzesByUser(
+            new LoginRequest(_user,pass)
+        )).ToList();
+    }
+    private async Task LoginRedirect()
+    {
+        nm.NavigateTo("/LoginPage");   
+    }
+    public string StatusMessage { get; set; }
+    private async Task HostQuiz(QuizDTO QuizId)
+    {
+        try
+        {
+            if (_user == null)
+            {
+                nm.NavigateTo("/LoginPage");
+                return;
+            }
+
+            var pass = await localStorage.GetItemAsync<string>("Password");
+            if (string.IsNullOrWhiteSpace(pass))
+            {
+                nm.NavigateTo("/LoginPage");
+                return;
+            }
+
+            var login = new LoginRequest(_user, pass);
+
+            var questions = (await qac.GetQuestionsByQuizId(QuizId.QuizId, login))?.ToList() ?? new List<QuestionDTO>();
+            if (questions.Count == 0)
+            {
+                StatusMessage = "Failed to host quiz: this quiz has no questions yet.";
+                return;
+            }
+
+            var lobbyId = await lac.CreateLobby(_user, pass, QuizId.QuizId);
+            if (string.IsNullOrWhiteSpace(lobbyId))
+            {
+                StatusMessage = "Failed to Host Quiz: lobby creation failed.";
+                return;
+            }
+
+            var hosted = await lac.HostLobby(lobbyId, login);
+            if (!hosted)
+            {
+                StatusMessage = "Failed to Host Quiz: hosting failed.";
+                return;
+            }
+
+            await localStorage.SetItemAsync("LobbyCode", lobbyId);
+            nm.NavigateTo($"/lobby/{lobbyId}/waiting/host");
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = "Failed to Host Quiz: " + ex.Message;
+        }
+    }
+
+    private async Task EditQuiz(QuizDTO QuizId)
+    {
+        if (QuizId != null)
+        {
+            nm.NavigateTo($"/QuizQuestionInfoPage/{QuizId.QuizId}");
+        }
+    }
+
+    private async Task DeleteQuiz(QuizDTO QuizId)
+    {
+        try
+        {
+            if (_user == null)
+            {
+                nm.NavigateTo("/LoginPage");
+                return;
+            }
+
+            var pass = await localStorage.GetItemAsync<string>("Password");
+            if (string.IsNullOrWhiteSpace(pass))
+            {
+                nm.NavigateTo("/LoginPage");
+                return;
+            }
+
+            var login = new LoginRequest<QuizDTO>(new LoginRequest(_user, pass),QuizId);
+
+            await qac.RemoveQuiz(login);
+            Quizzes.Remove(QuizId);
+            StatusMessage = "Quiz deleted.";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = "Failed to delete quiz: " + ex.Message;
+        }
+    }
+}

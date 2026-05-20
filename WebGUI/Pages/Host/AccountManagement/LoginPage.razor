@@ -1,0 +1,114 @@
+@page "/LoginPage"
+@using System.Reflection.Metadata
+@using Database
+@using WebGUI.DTOs
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@using APICaller.API
+@using APICaller.Hub
+@using Shared
+@inject UserCaller uac
+@inject LobbyCaller lac
+
+<div class="login-page">
+    <a href="/" class="back-arrow">
+        <span></span>
+    </a>
+
+    <div class="login-left">
+        <h1 class="side-brand">WitCheck</h1>
+        <p class="side-text">Play. Host. Challenge.</p>
+    </div>
+    
+    <div class="login-right">
+        <div class="form-header">
+            <img src="images/Logo.png" alt="WitCheck Logo" class="form-logo" />
+            <h2 class="form-title">Login</h2>
+        </div>
+
+        <form class="login-form" @onsubmit="LoginUser">
+            <input type="email" placeholder="Enter Email" @bind="email" class="input-field" />
+            <input type="text" placeholder="Enter Username" @bind="username" class="input-field" />
+            
+            <div class="password-container">
+                <input type="@passwordInputType" placeholder="Enter Password" @bind="password" class="input-field" />
+                <img src="images/view.png" alt="Toggle Password" class="toggle-password" @onclick="TogglePassword" />
+            </div>
+
+            <a href="#" class="forgot-link">Forgot password? <span>Reset password</span></a>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <p class="error-message">@errorMessage</p>
+            }
+
+            <button type="submit" class="btn primary">Login</button>
+            <button type="button" @onclick="SignUpUser" class="btn secondary">Sign Up</button>
+        </form>
+    </div>
+</div>
+
+@code {
+    private string passwordInputType = "password";
+    private string password;
+    private string username;
+    private string email;
+    private UserDTO User;
+    private string errorMessage;
+    protected override async Task OnInitializedAsync()
+    {
+    }
+    private void TogglePassword()
+    {
+        passwordInputType = passwordInputType == "password" ? "text" : "password";
+    }
+
+    public async Task LoginUser()
+    {
+        errorMessage = null;
+        try
+        {
+            User = new UserDTO(0, "", "", username, email);
+            var temp = await uac.LoginUserRoute(User, password);
+            await localStorage.SetItemAsync("UserID", temp);
+            await localStorage.SetItemAsync("Password", password);
+            nm.NavigateTo("/AccountDetailsPage");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Invalid input.";
+        }
+    }
+
+    public async Task SignUpUser()
+    {
+        nm.NavigateTo("/SignUpPage");
+    }
+    
+    /*private async Task testing()
+    {
+        var _lobbyCaller = new LobbyCaller("http://localhost:5203");
+        var lobby = await _lobbyCaller.CreateLobby(
+            new UserDTO(1,"test","test","test","test@test.com"),
+            "test",
+            1
+        );
+        await _lobbyCaller.HostLobby(lobby,new LoginRequest(new UserDTO(1,"test","test","test","test@test.com"),"test"));
+        
+        var hostHubCaller = new HostHubCaller("http://localhost:5203");
+        var _playerHubCaller=new PlayerHubCaller("http://localhost:5203");
+
+        await hostHubCaller.StartHub();
+        await _playerHubCaller.Start();
+        
+        await hostHubCaller.Join(new LoginRequest(){password = "test",userdto = new UserDTO(1,"test","test","test","test@test.com")},lobby);
+        string msg = "";
+        hostHubCaller.PlayerJoin(dto =>
+        {
+            msg = dto.Name;
+        });
+        await _playerHubCaller.JoinLobby(lobby,new PlayerDTO(null,"bert",100));
+        
+    }*/
+
+}

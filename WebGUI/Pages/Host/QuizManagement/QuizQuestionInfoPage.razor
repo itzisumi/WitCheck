@@ -1,0 +1,554 @@
+@page "/QuizQuestionInfoPage/{QuizId:int}"
+@using System.Runtime.Intrinsics.X86
+@using System.Text.Json
+@using WebGUI.DTOs
+@using APICaller.API
+@using Database.WitCheckEntities
+@using Mapster
+@using Shared
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject UserCaller uac
+@inject LobbyCaller lac
+@inject QuizCaller qac
+
+<div class="quizinfo-container">
+    <a href="/OwnedQuizPage" class="back-arrow">
+        <span></span>
+    </a>
+
+    <div class="form-header">
+        <img src="images/Logo.png" alt="WitCheck Logo" class="form-logo" />
+        <h2 class="form-title">Quiz Editor</h2>
+    </div>
+
+    <div class="quizinfo-panel">
+        <div class="quizinfo-bar">
+            <div class="quizname-wrapper">
+                <label class="color-badge-wrapper" title="Change color">
+                    <span class="color-badge" style="background-color:@_quizColor;"></span>
+                    <input type="color" class="color-badge-input" @bind="_quizColor" />
+                </label>
+                <span class="quizname-display">@CurrentQuiz.Quizname</span>
+            </div>
+            <div class="quiz-actions">
+                <button class="btn primary" @onclick="AddQuestion">+ Add Question</button>
+                <button class="btn secondary" @onclick="Save">Save</button>
+            </div>
+        </div>
+
+        <div class="question-list">
+            @foreach (var question in Questions)
+            {
+                var idx = Questions.IndexOf(question);
+
+                <div class="question-block @(ExpandedQuestionIndex == idx ? "open" : "")">
+                    <div class="question-item" style="background-color:@_quizColor;"
+                         @onclick="() => ToggleExpand(idx)">
+                        <span class="question-text">@question.QuestionText</span>
+                        <button class="toggle-btn" @onclick:stopPropagation="true" @onclick="() => ToggleExpand(idx)">
+                            <img src="images/down-chevron.png" alt="Expand" class="chevron-icon" />
+                        </button>
+                    </div>
+
+                    <div class="answer-section">
+                        <div class="answers-header">
+                            <h4 class="points-label">Points: @question.Points</h4>
+                            <div class="question-action-btns">
+                                <button class="btn danger" @onclick="() => RemoveQuestion(question)">Remove</button>
+                                <button class="btn secondary" @onclick="() => EditQuestion(question)">Edit Question</button>
+                            </div>
+                        </div>
+
+                        <div class="answers-grid">
+                            @if (question.answers.Count > 0)
+                            {
+                                @foreach (EditAnswerQuestionObject answer in question.answers)
+                                {
+                                    var tempans = answer;
+                                    <div class="answer-field">
+                                        <input type="text" value="@tempans.Answer1" class="input-field" readonly />
+                                        <input type="checkbox" checked="@tempans.IsCorrect" disabled />
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <button class="scroll-top" @onclick="ScrollToTop">
+        <img src="images/top-chevron.png" alt="Top" class="top-icon" />
+    </button>
+
+    <!-- Modal -->
+    @if (ShowModal)
+    {
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <button class="close-btn" @onclick="CloseModal">✕</button>
+                <h2 class="modal-title">Edit Question</h2>
+
+                <div class="modal-form">
+                    <label>QUESTION:</label>
+                    <input type="text" class="input-field" @bind="CurrentlyEdited.QuestionText" />
+
+                    <label>ANSWERTYPE:</label>
+                    <select class="input-field" @bind="EditingQuestionType">
+                        <option value="">-- Bitte wählen --</option>
+                        <option value="MultipleChoice">Multiple Choice</option>
+                        <option value="TrueFalse">True / False</option>
+                    </select>
+
+                    <label>POINTS:</label>
+                    <input type="number" class="input-field" @bind="CurrentlyEdited.Points" />
+                    <label>TIME (SECONDS):</label>
+                    <input type="number" min="1" class="input-field" @bind="CurrentlyEdited.Time" />
+                    <label>ANSWERS:</label>
+                    <div class="answers-grid">
+                        @for (int i = 0; i < CurrentlyEdited.answers.Count(); i++)
+                        {
+                            int d = i;
+                            <div class="answer-field">
+                                <input type="text" class="input-field" @bind="CurrentlyEdited.answers[d].Answer1" />
+                                <input type="checkbox" @bind="CurrentlyEdited.answers[d].IsCorrect" />
+                                <button type="button" class="icon-btn"
+                                        @onclick="() => RemoveAnswer(CurrentlyEdited.answers[d], CurrentlyEdited)">
+                                    <img src="images/minus.png" alt="Remove" />
+                                </button>
+                            </div>
+                        }
+                        <button type="button" class="icon-btn" @onclick="AddAnswer">
+                            <img src="images/plus.png" alt="Add" />
+                        </button>
+                    </div>
+
+
+                    <button class="btn primary save-btn" @onclick="SaveQuestion">Save</button>
+                </div>
+            </div>
+        </div>
+    }
+
+</div>
+
+@code {
+    private const short DefaultQuestionTime = 30;
+
+    private QuizDTO CurrentQuiz { get; set; } =
+    new QuizDTO(1, "My Awesome Quiz", 1, "#5BB933");
+    private string _quizColor { get; set; } = "#5BB933";
+    [Parameter]
+    public int QuizId { get; set; }
+
+    public EditQuestionObject CurrentlyEdited;
+
+    private int ExpandedQuestionIndex { get; set; } = -1;
+    private bool ShowModal { get; set; }
+    private UserDTO _user;
+
+    public List<EditQuestionObject> Questions = new();
+    public List<EditQuestionObject> QuestionsToRemove = new();
+    public Dictionary<int, List<EditAnswerQuestionObject>> AnswersToRemove = new();
+
+    private string _editingQuestionType;
+    public string EditingQuestionType
+    {
+        get => _editingQuestionType;
+        set
+        {
+            if (_editingQuestionType != value)
+            {
+                _editingQuestionType = value;
+
+                if (value == "TrueFalse")
+                {
+                    SetQuestionToTrueFalse();
+                }
+                else if (value == "MultipleChoice")
+                {
+                    SetMultipleChoice();
+                }
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var user = await localStorage.GetItemAsync<int>("UserID");
+            if (user != null)
+            {
+                _user = await uac.GetUserById(user);
+            }
+            else
+            {
+                throw new Exception("Not logged in before!");
+            }
+        }
+        catch (Exception ex)
+        {
+        }
+
+        try
+        {
+            var quiz = await qac.GetQuiz(QuizId, new LoginRequest()
+            {
+                password = await
+            localStorage.GetItemAsync<string>("Password"),
+                userdto = _user
+            });
+            CurrentQuiz = quiz;
+            _quizColor = quiz.ColorCode ?? "#5BB933";
+            var _questions = (await qac.GetQuestionsByQuizId(quiz.QuizId, new LoginRequest()
+            {
+                password = await
+            localStorage.GetItemAsync<string>("Password"),
+                userdto = _user
+            })).ToList();
+            foreach (var q in _questions)
+            {
+                Questions.Add(new EditQuestionObject(q));
+            }
+            @foreach (var question in Questions)
+            {
+                var answers = (await qac.GetAnswerByQuestionId((int)question.QuestionId, new LoginRequest()
+                {
+                    password = await
+                localStorage.GetItemAsync<string>("Password"),
+                    userdto = _user
+                })).ToList();
+                foreach (var a in answers)
+                {
+                    question.answers.Add(new EditAnswerQuestionObject(a));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+        }
+
+    }
+    private void AddQuestion()
+    {
+        var temp = new EditQuestionObject(new QuestionDTO(0, QuizId, Questions.Count, 0, "", DefaultQuestionTime));
+        temp.answers = new();
+        Questions.Add(temp);
+        StateHasChanged();
+    }
+
+    private void ToggleExpand(int index)
+    {
+        ExpandedQuestionIndex = (ExpandedQuestionIndex == index) ? -1 : index;
+    }
+
+    private void EditQuestion(EditQuestionObject editQuestionObject)
+    {
+        CurrentlyEdited = editQuestionObject;
+        ShowModal = true;
+        StateHasChanged();
+    }
+
+    private async Task SaveQuestion()
+    {
+        CurrentlyEdited.Time = NormalizeQuestionTime(CurrentlyEdited.Time);
+        Questions[Questions.FindIndex(x => x == CurrentlyEdited)] = CurrentlyEdited;
+        StateHasChanged();
+        CloseModal();
+    }
+
+    private void CloseModal() => ShowModal = false;
+
+    private void AddAnswer()
+    {
+        var ans = new EditAnswerQuestionObject();
+        ans.QuestionId = (int)CurrentlyEdited.QuestionId;
+        CurrentlyEdited.answers.Add(ans);
+        StateHasChanged();
+    }
+
+    private void RemoveAnswer(EditAnswerQuestionObject answer, EditQuestionObject question)
+    {
+        question.answers.Remove(answer);
+        if (answer.AnswerId != 0)
+        {
+            AnswersToRemove.TryAdd(question.ConsistenId, new List<EditAnswerQuestionObject>());
+            AnswersToRemove[question.ConsistenId].Add(answer);
+        }
+        var tempanswers = question.answers.OrderBy(x => x.OrderNumber).ToList();
+        int order = 0;
+        foreach (var answ in tempanswers)
+        {
+            answ.OrderNumber = order;
+            order++;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RemoveQuestion(EditQuestionObject question)
+    {
+        try
+        {
+            var tempans = new List<EditAnswerQuestionObject>();
+            @foreach (var answer in question.answers)
+            {
+                tempans.Add(answer);
+            }
+            @foreach (var answer in tempans)
+            {
+                RemoveAnswer(answer, question);
+            }
+            Questions.Remove(question);
+            QuestionsToRemove.Add(question);
+            int order = 0;
+            var tempquestions = Questions.OrderBy(x => x.OrderNumber).ToList();
+            foreach (var ques in tempquestions)
+            {
+                ques.OrderNumber = order;
+                order++;
+            }
+            Questions = tempquestions;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+        }
+
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            var loginrequest = new LoginRequest();
+            loginrequest.userdto = _user;
+            loginrequest.password = await localStorage.GetItemAsync<string>("Password");
+            if (loginrequest.password != null)
+            {
+                CurrentQuiz = CurrentQuiz with { ColorCode = _quizColor };
+                await qac.UpdateQuiz(new LoginRequest<QuizDTO>(loginrequest, CurrentQuiz));
+
+                List<EditAnswerQuestionObject> tempvalues = new();
+                @foreach (var answers in AnswersToRemove.Values)
+                {
+                    @foreach (var ans in answers)
+                    {
+                        if (ans.AnswerId != 0 && ans.QuestionId != 0)
+                        {
+                            await qac.RemoveAnswer(new LoginRequest<AnswerDTO>(loginrequest, ans.AdaptToDTO()));
+                        }
+                    }
+                }
+
+                @foreach (var question in QuestionsToRemove)
+                {
+
+                    if (question.QuestionId != null && question.QuestionId != 0)
+                        await qac.RemoveQuestion(new LoginRequest<QuestionDTO>(loginrequest, question.AdaptToDTO()));
+                }
+
+                QuestionsToRemove = new List<EditQuestionObject>();
+                AnswersToRemove = new Dictionary<int, List<EditAnswerQuestionObject>>();
+
+                @foreach (var question in Questions)
+                {
+                    question.Time = NormalizeQuestionTime(question.Time);
+                    if (question.QuestionId == 0 || question.QuestionId == null)
+                    {
+                        var ansquestion = await qac.AddQuestion(new LoginRequest<QuestionDTO>(loginrequest, question.AdaptToDTO()));
+                        question.QuestionId = ansquestion.QuestionId;
+                    }
+                    else
+                    {
+                        var ansquestion = await qac.UpdateQuestion(new LoginRequest<QuestionDTO>(loginrequest, question.AdaptToDTO()));
+                    }
+                    @foreach (var answer in question.answers)
+                    {
+                        if (answer.AnswerId == 0 || answer.AnswerId == null)
+                        {
+                            var ansdto = await qac.AddAnswer(new LoginRequest<AnswerDTO>(loginrequest, answer.AdaptToDTO()));
+                            if (ansdto != null)
+                            {
+                                answer.AnswerId = ansdto.AnswerId;
+                            }
+                        }
+                        else
+                        {
+                            var ansdto = await qac.UpdateAnswer(new LoginRequest<AnswerDTO>(loginrequest, answer.AdaptToDTO()));
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            StateHasChanged();
+            return;
+        }
+        nm.NavigateTo("/OwnedQuizPage");
+    }
+
+    async Task SetQuestionToTrueFalse()
+    {
+        try
+        {
+            var tempans = new List<EditAnswerQuestionObject>();
+            @foreach (var answer in CurrentlyEdited.answers)
+            {
+                tempans.Add(answer);
+            }
+            @foreach (var answer in tempans)
+            {
+                RemoveAnswer(answer, CurrentlyEdited);
+            }
+
+            CurrentlyEdited.answers = new List<EditAnswerQuestionObject>();
+            var anstrue = new EditAnswerQuestionObject();
+            anstrue.Answer1 = "True";
+            anstrue.QuestionId = (int)CurrentlyEdited.QuestionId;
+            var ansfalse = new EditAnswerQuestionObject();
+            ansfalse.Answer1 = "False";
+            ansfalse.QuestionId = (int)CurrentlyEdited.QuestionId;
+            CurrentlyEdited.answers.Add(anstrue);
+            CurrentlyEdited.answers.Add(ansfalse);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    async Task SetMultipleChoice()
+    {
+        try
+        {
+            var tempans = new List<EditAnswerQuestionObject>();
+            @foreach (var answer in CurrentlyEdited.answers)
+            {
+                tempans.Add(answer);
+            }
+            @foreach (var answer in tempans)
+            {
+                RemoveAnswer(answer, CurrentlyEdited);
+            }
+            CurrentlyEdited.answers = new List<EditAnswerQuestionObject>();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+    private void ScrollToTop() => JS.InvokeVoidAsync("window.scrollTo", 0, 0);
+
+    private static short NormalizeQuestionTime(short time)
+    {
+        return time > 0 ? time : DefaultQuestionTime;
+    }
+
+    public class EditQuestionObject
+    {
+        public int ConsistenId { get; init; }
+        private int? questionId;
+        public int? QuestionId
+        {
+            get { return questionId; }
+            set
+            {
+                if (value != questionId)
+                {
+                    @foreach (var answer in answers)
+                    {
+                        answer.QuestionId = (int)value;
+                    }
+                    questionId = value;
+                }
+            }
+        }
+
+        public int QuizdId { get; set; }
+        public int OrderNumber { get; set; }
+        public int Points { get; set; }
+        public string QuestionText { get; set; }
+        public short Time { get; set; }
+
+        public List<EditAnswerQuestionObject> answers { get; set; } = new List<EditAnswerQuestionObject>();
+
+        public EditQuestionObject(QuestionDTO dto)
+        {
+            QuestionId = dto.QuestionId;
+            QuizdId = dto.QuizId;
+            OrderNumber = dto.OrderNumber;
+            Points = dto.Points;
+            QuestionText = dto.QuestionText;
+            Time = NormalizeQuestionTime(dto.Time);
+            ConsistenId = DateTime.Now.Millisecond;
+        }
+        public QuestionDTO AdaptToDTO()
+        {
+            if (this.QuestionId == null)
+            {
+                return new
+                QuestionDTO(0, QuizdId = this.QuizdId, OrderNumber = this.OrderNumber, Points = this.Points, QuestionText = this.QuestionText, Time = NormalizeQuestionTime(this.Time));
+
+            }
+            return new
+            QuestionDTO((int)this.QuestionId, QuizdId = this.QuizdId, OrderNumber = this.OrderNumber, Points = this.Points, QuestionText = this.QuestionText, Time = NormalizeQuestionTime(this.Time));
+        }
+
+        public List<AnswerDTO> AdaptAnswersToDTOs()
+        {
+            List<AnswerDTO> list = new List<AnswerDTO>();
+            @foreach (var answer in answers)
+            {
+                list.Add(answer.AdaptToDTO());
+            }
+
+            return list;
+        }
+    }
+
+    public class EditAnswerQuestionObject
+    {
+
+        public int? AnswerId
+        {
+            get;
+            set;
+        }
+
+        public string? Answer1 { get; set; }
+
+        public bool IsCorrect { get; set; }
+
+        public int QuestionId { get; set; }
+
+        public int OrderNumber { get; set; }
+
+        public EditAnswerQuestionObject()
+        {
+
+        }
+        public EditAnswerQuestionObject(AnswerDTO answ)
+        {
+            AnswerId = answ.AnswerId;
+            Answer1 = answ.Answer1;
+            IsCorrect = answ.IsCorrect;
+            QuestionId = answ.QuestionId;
+            OrderNumber = answ.OrderNumber;
+        }
+        public AnswerDTO? AdaptToDTO()
+        {
+            if (AnswerId == null)
+            {
+                AnswerId = 0;
+            }
+            return new AnswerDTO((int)this.AnswerId, Answer1 = this.Answer1, IsCorrect = this.IsCorrect, QuestionId =
+            this.QuestionId, OrderNumber);
+        }
+    }
+}

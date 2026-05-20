@@ -1,0 +1,187 @@
+@page "/lobby/{LobbyCode}/answers/host/tf"
+@implements IDisposable
+@using WebGUI.DTOs
+@using APICaller.API
+@using APICaller.Hub
+@using Shared
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject UserCaller uac
+@inject LobbyCaller lac
+@inject QuizCaller qc
+@inject HostHubCaller hostHub
+@inject QuestionTimerService questionTimer
+
+<div class="truefalse-page">
+
+    <div class="quiz-header" style="@GetQuizHeaderStyle()">
+        <h1 class="quiz-title">@QuestionText</h1>
+        <div class="timer">TIMER: @timeLeft s</div>
+        <img src="images/Logo.png" alt="Logo" class="quiz-logo" />
+    </div>
+
+    <div class="line-wrapper">
+        <hr class="divider" />
+        <div class="playercount">
+            ANSWERS: @AnsweredCount
+        </div>
+    </div>
+
+    <div class="tf-wide">
+        <div class="tf-box true">
+            <span class="tf-icon">✓</span>
+            <span class="tf-label">TRUE</span>
+        </div>
+        <div class="tf-box false">
+            <span class="tf-icon">✗</span>
+            <span class="tf-label">FALSE</span>
+        </div>
+    </div>
+
+    <div class="footer">
+        <button class="skip-btn" @onclick="SkipQuestion">Skip</button>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string LobbyCode { get; set; } = string.Empty;
+
+    private UserDTO _user = default!;
+    private string LobbyId = string.Empty;
+
+    private QuizDTO quiz = new(0, "Quiz", 0, "#5BB933");
+    private int AnsweredCount = 0;
+    private IDisposable? _allPlayerFinishedSubscription;
+    private string QuestionText = "Question";
+    private bool _navigating;
+    private int timeLeft = QuestionTimerService.DefaultSeconds;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var user = await localStorage.GetItemAsync<int>("UserID");
+            if (user == null) throw new Exception("Not logged in");
+
+            _user = await uac.GetUserById(user);
+            await hostHub.StartHub();
+            InitHubSubscriptions();
+            questionTimer.Stop();
+            questionTimer.Changed += HandleTimerChanged;
+            questionTimer.Completed += HandleTimerCompleted;
+            SyncTimeLeft();
+            await LoadAnsweredCountAsync();
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private async Task LoadAnsweredCountAsync()
+    {
+        LobbyId = LobbyCode;
+        var answerCounts = await lac.GetAnswersAsDict(LobbyId)
+                           ?? new Dictionary<int, int>();
+
+        AnsweredCount = answerCounts
+            .Where(entry => entry.Key != -1)
+            .Sum(entry => entry.Value);
+
+        var question = await lac.GetQuestion(LobbyId)
+                       ?? throw new Exception("Question not found");
+        QuestionText = question.QuestionText;
+        var countdownSeconds = question.Time > 0
+            ? question.Time
+            : QuestionTimerService.DefaultSeconds;
+
+        var login = new LoginRequest(_user, await localStorage.GetItemAsync<string>("Password") ?? string.Empty
+        );
+
+        quiz = await qc.GetQuiz(question.QuizId, login)
+               ?? throw new Exception("Quiz not found");
+
+        questionTimer.Start(countdownSeconds);
+        SyncTimeLeft();
+    }
+
+    private void InitHubSubscriptions()
+    {
+        _allPlayerFinishedSubscription?.Dispose();
+        _allPlayerFinishedSubscription = hostHub.AllPlayerFinished(async () =>
+        {
+            await HandleAllPlayersFinishedAsync();
+        });
+    }
+
+    
+    private async Task SkipQuestion()
+    {
+        if (_navigating)
+            return;
+
+        _navigating = true;
+        var password = await localStorage.GetItemAsync<string>("Password") ?? string.Empty;
+        await hostHub.AnswerTimeUp(new LoginRequest(_user, password),LobbyCode);
+        nm.NavigateTo($"/lobby/{LobbyCode}/answers/host/tf/results");
+    }
+
+    private string GetQuizHeaderStyle()
+    {
+        var quizColor = quiz.ColorCode;
+        return $"background-color:{quizColor};color:{QuizColorHelper.GetReadableTextColor(quizColor)};--quiz-header-text-shadow:{QuizColorHelper.GetReadableTextShadow(quizColor)};";
+    }
+
+    private void HandleTimerChanged()
+    {
+        SyncTimeLeft();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleTimerCompleted()
+    {
+        _ = InvokeAsync(HandleQuestionTimeoutAsync);
+    }
+
+    private void SyncTimeLeft()
+    {
+        timeLeft = questionTimer.TimeLeft;
+    }
+
+    private async Task HandleAllPlayersFinishedAsync()
+    {
+        if (_navigating)
+            return;
+
+        _navigating = true;
+        questionTimer.Stop();
+        SyncTimeLeft();
+
+        var password = await localStorage.GetItemAsync<string>("Password") ?? string.Empty;
+        await hostHub.AnswerTimeUp(new LoginRequest(_user, password),LobbyCode);
+        nm.NavigateTo($"/lobby/{LobbyCode}/answers/host/tf/results");
+    }
+
+    private async Task HandleQuestionTimeoutAsync()
+    {
+        if (_navigating)
+            return;
+
+        _navigating = true;
+        questionTimer.Stop();
+        SyncTimeLeft();
+
+        var password = await localStorage.GetItemAsync<string>("Password") ?? string.Empty;
+        await hostHub.AnswerTimeUp(new LoginRequest(_user, password),LobbyCode);
+        nm.NavigateTo($"/lobby/{LobbyCode}/answers/host/tf/results");
+    }
+
+    public void Dispose()
+    {
+        _allPlayerFinishedSubscription?.Dispose();
+        questionTimer.Changed -= HandleTimerChanged;
+        questionTimer.Completed -= HandleTimerCompleted;
+        questionTimer.Stop();
+    }
+}

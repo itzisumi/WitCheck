@@ -1,0 +1,136 @@
+@page "/lobby/{LobbyCode}/answers/host/tf/results"
+@using WebGUI.DTOs
+@using APICaller.API
+@using APICaller.Hub
+@using Shared
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject UserCaller uac
+@inject LobbyCaller lac
+@inject QuizCaller qc
+@inject HostHubCaller hostHub
+
+<div class="truefalse-page">
+    <div class="quiz-header" style="@GetQuizHeaderStyle()">
+        <h1 class="quiz-title">@QuestionText</h1>
+        <img src="images/Logo.png" alt="Logo" class="quiz-logo" />
+    </div>
+    
+    <div class="line-wrapper">
+        <hr class="divider" />
+        <div class="playercount">
+            ANSWERS: @AnsweredCount
+        </div>
+    </div>
+    
+    <div class="tf-wide">
+        <div class="tf-column">
+            <div class="vote-bubble true">@TrueVotes</div>
+            <div class="tf-box true @(TrueIsCorrect ? "tf-box--correct" : "tf-box--wrong")">
+                <span class="tf-icon">✓</span>
+                <span class="tf-label">TRUE</span>
+            </div>
+        </div>
+
+        <div class="tf-column">
+            <div class="vote-bubble false">@FalseVotes</div>
+            <div class="tf-box false @(!TrueIsCorrect ? "tf-box--correct" : "tf-box--wrong")">
+                <span class="tf-icon">✗</span>
+                <span class="tf-label">FALSE</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <button class="skip-btn" @onclick="SkipQuestion">Skip</button>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string LobbyCode { get; set; } = string.Empty;  
+
+    private UserDTO _user = default!;
+    private string LobbyId = string.Empty;
+
+    private QuizDTO quiz = new(0, "Quiz", 0, "#5BB933");
+
+    private int TrueVotes = 0;
+    private int FalseVotes = 0;
+    private bool TrueIsCorrect = false;
+    private int AnsweredCount = 0;
+    private string QuestionText = "Question";
+    
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var user = await localStorage.GetItemAsync<int>("UserID");
+            if (user == null) throw new Exception("Not logged in");
+
+            _user = await uac.GetUserById(user);
+            await hostHub.StartHub();
+            await LoadResultsAsync();
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private async Task LoadResultsAsync()
+    {
+        LobbyId = LobbyCode;
+        var question = await lac.GetQuestion(LobbyId)
+                       ?? throw new Exception("Question not found");
+        QuestionText = question.QuestionText;
+        
+        var login = new LoginRequest(_user,await localStorage.GetItemAsync<string>("Password") ?? string.Empty
+        );
+        
+        var answers = (await qc.GetAnswerByQuestionId(question.QuestionId, login))
+                      ?.OrderBy(a => a.OrderNumber)
+                      .ToList()
+                      ?? throw new Exception("No answers found");
+
+        if (answers.Count != 2)
+            throw new Exception("True/False question must have exactly 2 answers");
+
+        var trueAnswer = answers
+            .FirstOrDefault(answer => string.Equals(answer.Answer1?.Trim(), "TRUE", StringComparison.OrdinalIgnoreCase))
+            ?? throw new Exception("TRUE answer not found");
+
+        var falseAnswer = answers
+            .FirstOrDefault(answer => string.Equals(answer.Answer1?.Trim(), "FALSE", StringComparison.OrdinalIgnoreCase))
+            ?? throw new Exception("FALSE answer not found");
+
+        var trueAnswerId = trueAnswer.AnswerId;
+        var falseAnswerId = falseAnswer.AnswerId;
+        TrueIsCorrect = trueAnswer.IsCorrect;
+        
+        var dict = await lac.GetAnswersAsDict(LobbyId)
+                   ?? new Dictionary<int, int>();
+
+        TrueVotes  = dict.TryGetValue(trueAnswerId, out var tv)  ? tv : 0;
+        FalseVotes = dict.TryGetValue(falseAnswerId, out var fv) ? fv : 0;
+        
+        AnsweredCount = dict
+            .Where(kv => kv.Key != -1)
+            .Sum(kv => kv.Value);
+        
+        quiz = await qc.GetQuiz(question.QuizId, login)
+               ?? throw new Exception("Quiz not found");
+    }
+
+    private string GetQuizHeaderStyle()
+    {
+        var quizColor = quiz.ColorCode;
+        return $"background-color:{quizColor};color:{QuizColorHelper.GetReadableTextColor(quizColor)};--quiz-header-text-shadow:{QuizColorHelper.GetReadableTextShadow(quizColor)};";
+    }
+    
+    private async Task SkipQuestion()
+    {
+        nm.NavigateTo($"/lobby/{LobbyCode}/leaderboard/host");
+    }
+}

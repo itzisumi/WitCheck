@@ -1,0 +1,56 @@
+CREATE DATABASE IF NOT EXISTS witcheck
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_0900_as_ci;
+
+USE witcheck;
+
+CREATE TABLE IF NOT EXISTS USERS (
+    UserID    INT         NOT NULL AUTO_INCREMENT,
+    Username  VARCHAR(45) NOT NULL,
+    Email     VARCHAR(45) NOT NULL,
+    Firstname VARCHAR(45) NULL,
+    Lastname  VARCHAR(45) NULL,
+    PRIMARY KEY (UserID),
+    UNIQUE INDEX Username (Username),
+    UNIQUE INDEX Email    (Email)
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_ci;
+
+CREATE TABLE IF NOT EXISTS PASSWORDS (
+    UserID   INT          NOT NULL,
+    Password VARCHAR(300) NOT NULL,
+    PRIMARY KEY (UserID),
+    CONSTRAINT passwords_ibfk_1 FOREIGN KEY (UserID) REFERENCES USERS (UserID)
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_ci;
+
+CREATE TABLE IF NOT EXISTS QUIZ (
+    QuizID    INT         NOT NULL AUTO_INCREMENT,
+    UserID    INT         NOT NULL,
+    Quizname  VARCHAR(45) NOT NULL,
+    ColorCode VARCHAR(7)  NULL,
+    PRIMARY KEY (QuizID),
+    INDEX UserID (UserID),
+    CONSTRAINT quiz_ibfk_1 FOREIGN KEY (UserID) REFERENCES USERS (UserID)
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_ci;
+
+CREATE TABLE IF NOT EXISTS QUESTIONS (
+    QuestionID   INT          NOT NULL AUTO_INCREMENT,
+    QuizID       INT          NOT NULL,
+    OrderNumber  TINYINT      NOT NULL DEFAULT 0,
+    Points       INT          NOT NULL DEFAULT 0,
+    QuestionText VARCHAR(200) NOT NULL,
+    Time         SMALLINT     NULL,
+    PRIMARY KEY (QuestionID),
+    INDEX QuizID (QuizID),
+    CONSTRAINT questions_ibfk_1 FOREIGN KEY (QuizID) REFERENCES QUIZ (QuizID)
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_ci;
+
+CREATE TABLE IF NOT EXISTS ANSWERS (
+    AnswerID    INT         NOT NULL AUTO_INCREMENT,
+    Answer      VARCHAR(45) NULL,
+    IsCorrect   TINYINT     NOT NULL DEFAULT 0,
+    QuestionID  INT         NOT NULL,
+    OrderNumber TINYINT     NOT NULL DEFAULT 0,
+    PRIMARY KEY (AnswerID),
+    INDEX QuestionID (QuestionID),
+    CONSTRAINT answers_ibfk_1 FOREIGN KEY (QuestionID) REFERENCES QUESTIONS (QuestionID)
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_ci;

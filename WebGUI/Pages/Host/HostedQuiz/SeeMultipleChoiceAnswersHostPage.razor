@@ -1,0 +1,125 @@
+@page "/lobby/{LobbyCode}/answers/host/mc/results"
+@using WebGUI.DTOs
+@using APICaller.API
+@using APICaller.Hub
+@using Shared
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject UserCaller uac
+@inject LobbyCaller lac
+@inject QuizCaller qc
+@inject HostHubCaller hostHub
+
+
+<div class="seeanswers-page">
+
+    <div class="quiz-header" style="@GetQuizHeaderStyle()">
+        <h1 class="quiz-title">@QuestionText</h1>
+        <img src="images/Logo.png" alt="Logo" class="quiz-logo" />
+    </div>
+
+    <div class="line-wrapper">
+        <hr class="divider" />
+        <div class="playercount">
+            ANSWERS: @AnsweredCount
+        </div>
+    </div>
+
+    <div class="answers-grid">
+        @for (int i = 0; i < Answers.Count; i++)
+        {
+            var isCorrect = Answers[i].IsCorrect;
+            <div class="answer-column">
+                <div class="vote-bubble">@Votes[i]</div>
+                <div class="answer-box @(isCorrect ? "answer-box--correct" : "answer-box--wrong")" style="background-color:@GetAnswerColor(i);">
+                    <span class="answer-letter">@((char)('A' + i))</span>
+                    <span class="answer-text">@Answers[i].Answer1</span>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="footer">
+        <button class="skip-btn" @onclick="SkipQuestion">Skip</button>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string LobbyCode { get; set; } = string.Empty;
+
+    private UserDTO _user = default!;
+    private string LobbyId = string.Empty;
+
+    private QuizDTO quiz = new(0, "Quiz", 0, "#5BB933");
+    private List<AnswerDTO> Answers = new();
+    private List<int> Votes = new();
+    private int AnsweredCount = 0;
+    private string QuestionText = "Question";
+    private static readonly string[] AnswerColors = ["#ff6b6b", "#4dabf7", "#ffd43b", "#51cf66"];
+    
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var user = await localStorage.GetItemAsync<int>("UserID");
+            if (user == null) throw new Exception("Not logged in");
+
+            _user = await uac.GetUserById(user);
+            await hostHub.StartHub();
+            await LoadResultsAsync();
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private async Task LoadResultsAsync()
+    {
+        LobbyId = LobbyCode;
+        
+        var question = await lac.GetQuestion(LobbyId)
+                       ?? throw new Exception("Question not found");
+        QuestionText = question.QuestionText;
+
+        var login = new LoginRequest(_user, await localStorage.GetItemAsync<string>("Password") ?? string.Empty);
+        
+        Answers = (await qc.GetAnswerByQuestionId(question.QuestionId, login))
+                  ?.OrderBy(a => a.OrderNumber)
+                  .ToList()
+                  ?? new();
+        
+        var dict = await lac.GetAnswersAsDict(LobbyId)
+                   ?? new Dictionary<int, int>();
+
+        Votes = Answers
+            .Select(a => dict.TryGetValue(a.AnswerId, out var v) ? v : 0)
+            .ToList();
+        
+        AnsweredCount = dict
+            .Where(kv => kv.Key != -1)
+            .Sum(kv => kv.Value);
+        
+        quiz = await qc.GetQuiz(question.QuizId, login)
+               ?? throw new Exception("Quiz not found");
+    }
+
+    private string GetQuizHeaderStyle()
+    {
+        var quizColor = quiz.ColorCode;
+        return $"background-color:{quizColor};color:{QuizColorHelper.GetReadableTextColor(quizColor)};--quiz-header-text-shadow:{QuizColorHelper.GetReadableTextShadow(quizColor)};";
+    }
+
+    private static string GetAnswerColor(int index) => AnswerColors[index % AnswerColors.Length];
+    
+    
+    private async Task SkipQuestion()
+    {
+        nm.NavigateTo($"/lobby/{LobbyCode}/leaderboard/host");
+    }
+
+
+   
+}

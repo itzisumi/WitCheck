@@ -1,0 +1,286 @@
+@page "/TrueFalseAnswers/{LobbyCode}"
+@implements IDisposable
+@using APICaller.API
+@using APICaller.Hub
+@using Shared
+@using WebGUI.DTOs
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject LobbyCaller lac
+@inject UserCaller uac
+@inject QuizCaller qc
+@inject PlayerHubCaller playerHub
+@inject QuestionTimerService questionTimer
+@inject WebGUI.Services.PlayerStateService playerState
+
+<div class="truefalse-page">
+
+    <div class="tf-wide">
+        <button type="button"
+                class='tf-box true @(selectedAnswer == "TRUE" ? "selected" : "")'
+                aria-label="TRUE"
+                disabled="@navigating"
+                @onclick='() => OnAnswerClick("TRUE")'>
+        </button>
+
+        <button type="button"
+                class='tf-box false @(selectedAnswer == "FALSE" ? "selected" : "")'
+                aria-label="FALSE"
+                disabled="@navigating"
+                @onclick='() => OnAnswerClick("FALSE")'>
+        </button>
+    </div>
+
+</div>
+
+@code {
+    [Parameter]
+    public string LobbyCode { get; set; } = string.Empty;
+
+    private QuizDTO? quiz;
+    private string? PlayerId;
+    private string? selectedAnswer;
+    private int timeLeft = QuestionTimerService.DefaultSeconds;
+    private bool navigating;
+    private IDisposable? finishedQuestionSubscription;
+    private List<AnswerDTO> answers = new();
+    private AnswerDTO? correctAnswer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LobbyCode))
+        {
+            nm.NavigateTo("/JoinPageWithCode");
+            return;
+        }
+
+        PlayerId = playerState.PlayerId;
+
+        if (string.IsNullOrWhiteSpace(PlayerId))
+        {
+            nm.NavigateTo("/JoinPageWithCode");
+            return;
+        }
+
+        playerState.ClearLastQuestionResult();
+
+        questionTimer.Stop();
+        questionTimer.Changed += HandleTimerChanged;
+        questionTimer.Completed += HandleTimerCompleted;
+        SyncTimeLeft();
+
+        await LoadQuestionAsync();
+        await InitHubAsync();
+    }
+
+    private async Task LoadQuestionAsync()
+    {
+        var countdownSeconds = QuestionTimerService.DefaultSeconds;
+
+        try
+        {
+            var question = await lac.GetQuestion(LobbyCode);
+            if (question != null && question.Time > 0)
+            {
+                countdownSeconds = question.Time;
+            }
+
+            answers = (await lac.GetAllAnswers(LobbyCode))
+                ?.Where(answer => answer != null)
+                .OrderBy(answer => answer.OrderNumber)
+                .ToList()
+                ?? new List<AnswerDTO>();
+
+            correctAnswer = answers.FirstOrDefault(answer => answer.IsCorrect);
+            await LoadQuizAsync(question);
+        }
+        catch (Exception ex)
+        {
+        }
+        finally
+        {
+            questionTimer.Start(countdownSeconds);
+            SyncTimeLeft();
+        }
+    }
+
+    private async Task LoadQuizAsync(QuestionDTO? question)
+    {
+        if (question == null)
+            return;
+
+        var userId = await localStorage.GetItemAsync<int?>("UserID");
+        var password = await localStorage.GetItemAsync<string>("Password");
+        if (userId == null || string.IsNullOrWhiteSpace(password))
+            return;
+
+        try
+        {
+            var user = await uac.GetUserById(userId.Value);
+            var login = new LoginRequest
+            {
+                userdto = user,
+                password = password
+            };
+
+            var loadedQuiz = await qc.GetQuiz(question.QuizId, login);
+            if (loadedQuiz != null)
+            {
+                quiz = loadedQuiz;
+            }
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private async Task InitHubAsync()
+    {
+        await playerHub.Start();
+
+        finishedQuestionSubscription = playerHub.FinishedQuestion(async (bool _) =>
+        {
+            await HandleFinishedQuestionAsync();
+        });
+    }
+
+    private async Task OnAnswerClick(string answer)
+    {
+        if (navigating || answers.Count == 0)
+            return;
+
+        selectedAnswer = answer;
+        navigating = true;
+        questionTimer.Stop();
+        SyncTimeLeft();
+        StateHasChanged();
+
+        var selectedAnswerId = ResolveSelectedAnswerId(answer);
+        await localStorage.SetItemAsync("SelectedAnswerId", selectedAnswerId);
+        await localStorage.SetItemAsync("SelectedAnswerTimeLeft", timeLeft);
+
+        await Task.Delay(350);
+        nm.NavigateTo($"/WaitingForOtherAnswers/{LobbyCode}");
+    }
+
+    public void Dispose()
+    {
+        questionTimer.Changed -= HandleTimerChanged;
+        questionTimer.Completed -= HandleTimerCompleted;
+        questionTimer.Stop();
+        finishedQuestionSubscription?.Dispose();
+    }
+
+    private int ResolveSelectedAnswerId(string answer)
+    {
+        var selected = answers.FirstOrDefault(current =>
+            string.Equals(current.Answer1, answer, StringComparison.OrdinalIgnoreCase));
+
+        return selected?.AnswerId ?? -1;
+    }
+
+    private async Task StoreNoAnswerAsync()
+    {
+        await localStorage.SetItemAsync("SelectedAnswerId", -1);
+        await localStorage.SetItemAsync("SelectedAnswerTimeLeft", 0);
+    }
+
+    private void HandleTimerChanged()
+    {
+        SyncTimeLeft();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleTimerCompleted()
+    {
+        _ = InvokeAsync(HandleQuestionTimeoutAsync);
+    }
+
+    private async Task HandleQuestionTimeoutAsync()
+    {
+        if (navigating)
+            return;
+
+        navigating = true;
+        questionTimer.Stop();
+        SyncTimeLeft();
+
+        await localStorage.RemoveItemAsync("QuestionAlreadyFinished");
+        await StoreNoAnswerAsync();
+        await StoreResultSnapshotAsync(-1);
+        nm.NavigateTo($"/OwnPointsToAnswer/{LobbyCode}");
+    }
+
+    private async Task HandleFinishedQuestionAsync()
+    {
+        if (navigating)
+        {
+            await localStorage.SetItemAsync("QuestionAlreadyFinished", true);
+            return;
+        }
+
+        navigating = true;
+        questionTimer.Stop();
+        SyncTimeLeft();
+
+        var lastAnswerId = await PersistAnswerStateAsync();
+        await StoreResultSnapshotAsync(lastAnswerId);
+        nm.NavigateTo($"/OwnPointsToAnswer/{LobbyCode}");
+    }
+
+    private async Task<int> PersistAnswerStateAsync()
+    {
+        var selectedAnswerId = await localStorage.GetItemAsync<int?>("SelectedAnswerId");
+        var selectedAnswerTimeLeft = await localStorage.GetItemAsync<int?>("SelectedAnswerTimeLeft");
+
+        if (selectedAnswerId == null || selectedAnswerTimeLeft == null)
+        {
+            await StoreNoAnswerAsync();
+            return -1;
+        }
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(PlayerId))
+            {
+                await lac.AnswerQuestion(LobbyCode, PlayerId, selectedAnswerId.Value, selectedAnswerTimeLeft.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+        }
+        finally
+        {
+            await localStorage.RemoveItemAsync("SelectedAnswerId");
+            await localStorage.RemoveItemAsync("SelectedAnswerTimeLeft");
+        }
+
+        return selectedAnswerId.Value;
+    }
+
+    private async Task StoreResultSnapshotAsync(int lastAnswerId)
+    {
+        if (string.IsNullOrWhiteSpace(PlayerId))
+            return;
+
+        try
+        {
+            var correctAnswerIds = (await lac.GetQuestionAnswer(LobbyCode))
+                ?.Select(answer => answer.AnswerId)
+                .ToList()
+                ?? new List<int>();
+
+            var points = await lac.GetPlayerPoints(LobbyCode, PlayerId);
+            var isCorrect = lastAnswerId != -1 && correctAnswerIds.Contains(lastAnswerId);
+            playerState.SetLastQuestionResult(isCorrect, points);
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private void SyncTimeLeft()
+    {
+        timeLeft = questionTimer.TimeLeft;
+    }
+}

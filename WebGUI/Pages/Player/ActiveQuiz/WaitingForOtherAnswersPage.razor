@@ -1,0 +1,153 @@
+@page "/WaitingForOtherAnswers/{LobbyCode}"
+@implements IDisposable
+@using APICaller.API
+@using APICaller.Hub
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject LobbyCaller lac
+@inject PlayerHubCaller playerHub
+@inject WebGUI.Services.PlayerStateService playerState
+
+<div class="waitanswers-page">
+
+    <div class="wait-content">
+        <div class="loader-circle"></div>
+
+        <div class="wait-text">
+            WAITING FOR OTHER PLAYERS TO ANSWER...
+        </div>
+    </div>
+
+</div>
+
+@code {
+    [Parameter]
+    public string LobbyCode { get; set; } = string.Empty;
+
+    private string? PlayerId;
+    private IDisposable? finishedQuestionSubscription;
+    private IDisposable? gameOverSubscription;
+    private bool navigating;
+    private Task<int>? submitAnswerTask;
+    private int lastAnswerId = -1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LobbyCode))
+        {
+            nm.NavigateTo("/JoinPageWithCode");
+            return;
+        }
+
+        PlayerId = playerState.PlayerId;
+
+        if (string.IsNullOrWhiteSpace(PlayerId))
+        {
+            nm.NavigateTo("/JoinPageWithCode");
+            return;
+        }
+
+        await InitHubAsync();
+        submitAnswerTask = TrySubmitAnswerAsync();
+        lastAnswerId = await submitAnswerTask;
+        
+        var alreadyFinished = await localStorage.GetItemAsync<bool?>("QuestionAlreadyFinished");
+        if (alreadyFinished == true)
+        {
+            await localStorage.RemoveItemAsync("QuestionAlreadyFinished");
+            await HandleFinishedQuestionAsync();
+        }
+    }
+
+    private async Task InitHubAsync()
+    {
+        await playerHub.Start();
+
+        finishedQuestionSubscription = playerHub.FinishedQuestion(async (bool _) =>
+        {
+            await HandleFinishedQuestionAsync();
+        });
+
+        gameOverSubscription = playerHub.GameOver(async () =>
+        {
+            if (navigating)
+                return;
+
+            navigating = true;
+            await StoreResultSnapshotAsync();
+            await InvokeAsync(() => nm.NavigateTo($"/PersonalPlace/{LobbyCode}"));
+        });
+    }
+
+    private async Task<int> TrySubmitAnswerAsync()
+    {
+        if (string.IsNullOrWhiteSpace(PlayerId))
+            return -1;
+
+        var answerId = await localStorage.GetItemAsync<int?>("SelectedAnswerId");
+        var timeLeft = await localStorage.GetItemAsync<int?>("SelectedAnswerTimeLeft");
+
+        if (answerId == null || timeLeft == null)
+            return -1;
+
+        lastAnswerId = answerId.Value;
+
+        try
+        {
+            await lac.AnswerQuestion(LobbyCode, PlayerId, answerId.Value, timeLeft.Value);
+        }
+        catch (Exception ex)
+        {
+        }
+        finally
+        {
+            await localStorage.RemoveItemAsync("SelectedAnswerId");
+            await localStorage.RemoveItemAsync("SelectedAnswerTimeLeft");
+        }
+
+        return answerId.Value;
+    }
+
+    private async Task HandleFinishedQuestionAsync()
+    {
+        if (navigating)
+            return;
+
+        navigating = true;
+
+        if (submitAnswerTask != null)
+        {
+            lastAnswerId = await submitAnswerTask;
+        }
+
+        await StoreResultSnapshotAsync();
+        await InvokeAsync(() => nm.NavigateTo("/OwnPointsToAnswer"));
+    }
+
+    private async Task StoreResultSnapshotAsync()
+    {
+        if (string.IsNullOrWhiteSpace(PlayerId))
+            return;
+
+        try
+        {
+            var correctAnswerIds = (await lac.GetQuestionAnswer(LobbyCode))
+                ?.Select(answer => answer.AnswerId)
+                .ToList()
+                ?? new List<int>();
+
+            var points = await lac.GetPlayerPoints(LobbyCode, PlayerId);
+            var isCorrect = lastAnswerId != -1 && correctAnswerIds.Contains(lastAnswerId);
+            playerState.SetLastQuestionResult(isCorrect, points);
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        finishedQuestionSubscription?.Dispose();
+        gameOverSubscription?.Dispose();
+    }
+}

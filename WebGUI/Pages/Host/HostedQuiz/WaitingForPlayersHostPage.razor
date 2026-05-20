@@ -1,0 +1,324 @@
+@page "/lobby/{LobbyCode}/waiting/host"
+@implements IDisposable
+@using WebGUI.DTOs
+@using APICaller.API
+@using APICaller.Hub
+@using Shared
+@inject NavigationManager nm
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject UserCaller uac
+@inject LobbyCaller lac
+@inject QuizCaller qc
+@inject HostHubCaller hostHub
+
+<div class="waitforplayers-page">
+
+    <div class="quiz-header" style="background-color:@quiz.ColorCode">
+        <h1 class="quiz-title">@quiz.Quizname</h1>
+        <img src="images/Logo.png" alt="Logo" class="quiz-logo" />
+    </div>
+
+    <div class="line-wrapper">
+        <hr class="divider" />
+        <div class="playercount">
+            PLAYERCOUNT: <span>@PlayerCount</span>
+        </div>
+        <div class="lobbycode">
+            LOBBYCODE: <span>@LobbyCode</span>
+        </div>
+    </div>
+
+    <div class="avatars-grid">
+        @if (PlayerCount == 0)
+        {
+            <div class="empty-state">Waiting for players to join...</div>
+        }
+        else
+        {
+            @foreach (var player in Players.Take(12))
+            {
+                <div class="avatar-slot" @key="player.PlayerId ?? player.Name">
+                    <button type="button"
+                            class="avatar-placeholder"
+                            @onclick="() => KickPlayerAsync(player)"
+                            disabled="@IsBusyPlayer(player)">
+                        <img src="@(string.IsNullOrWhiteSpace(player.AvaterPic) ? "images/avatars/default.png" : player.AvaterPic)"
+                             alt="@player.Name"
+                             class="avatar-image" />
+                        <span class="player-name">@player.Name</span>
+                        <div class="kick-overlay">
+                            @(IsBusyPlayer(player) ? "..." : "KICK")
+                        </div>
+                    </button>
+                </div>
+            }
+        }
+    </div>
+
+    <div class="footer">
+        <button class="cancel-btn" @onclick="CancelLobby">CANCEL</button>
+        <button class="start-btn" @onclick="StartLobby">START LOBBY</button>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string LobbyCode { get; set; } = string.Empty;
+
+    private UserDTO _user = default!;
+    private string LobbyId = string.Empty;
+
+    private QuizDTO quiz = new(0, "Quiz", 0, "#5BB933");
+
+    private List<PlayerDTO> Players = new();
+    private int PlayerCount => Players.Count;
+    private IDisposable? _playerJoinSubscription;
+    private IDisposable? _playerLeaveSubscription;
+    private CancellationTokenSource _refreshCts = new();
+    private string? _busyPlayerId;
+
+    
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            LobbyCode = LobbyCode.Trim();
+            if (string.IsNullOrWhiteSpace(LobbyCode))
+            {
+                nm.NavigateTo("/LoginPage", true);
+                return;
+            }
+
+            LobbyId = LobbyCode;
+            var user = await localStorage.GetItemAsync<int>("UserID");
+            if (user != null)
+            {
+                _user = await uac.GetUserById(user);
+            }
+            else
+            {
+                throw new Exception("Not logged in before!");
+            }
+            await hostHub.StartHub();
+            InitHubSubscriptions();
+            await hostHub.Join(await CreateLoginRequestAsync(), LobbyId);
+            await LoadLobbyStateAsync();
+            _ = PollPlayersAsync(_refreshCts.Token);
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private async Task LoadLobbyStateAsync()
+    {
+        LobbyId = LobbyCode;
+        Players = (await lac.GetAllPlayers(LobbyId))
+                  ?.DistinctBy(p => p.PlayerId ?? p.Name)
+                  .ToList()
+                  ?? new();
+        
+        var question = await lac.GetQuestion(LobbyId);
+        var login = new LoginRequest(_user,
+            await localStorage.GetItemAsync<string>("Password") ?? string.Empty
+        );
+        
+        if (question != null)
+        {
+            var loadedQuiz = await qc.GetQuiz(question.QuizId, login);
+            if (loadedQuiz != null)
+                quiz = loadedQuiz;
+        }
+    }
+
+    private async Task PollPlayersAsync(CancellationToken token)
+    {
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                await Task.Delay(1500, token);
+                if (token.IsCancellationRequested)
+                    break;
+
+                var latestPlayers = (await lac.GetAllPlayers(LobbyId))
+                    ?.DistinctBy(p => p.PlayerId ?? p.Name)
+                    .ToList() ?? new List<PlayerDTO>();
+                if (!SamePlayers(Players, latestPlayers))
+                {
+                    await InvokeAsync(() =>
+                    {
+                        Players = latestPlayers;
+                        StateHasChanged();
+                    });
+                }
+            }
+        }
+        catch (TaskCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private static bool SamePlayers(List<PlayerDTO> current, List<PlayerDTO> next)
+    {
+        if (current.Count != next.Count)
+            return false;
+
+        for (var i = 0; i < current.Count; i++)
+        {
+            var c = current[i];
+            var n = next[i];
+            if (c.PlayerId != n.PlayerId || c.Name != n.Name || c.AvaterPic != n.AvaterPic || c.Points != n.Points)
+                return false;
+        }
+
+        return true;
+    }
+
+    private void InitHubSubscriptions()
+    {
+        _playerJoinSubscription?.Dispose();
+        _playerLeaveSubscription?.Dispose();
+
+        _playerJoinSubscription = hostHub.PlayerJoin(async player =>
+        {
+            await InvokeAsync(() =>
+            {
+                UpsertPlayer(player);
+                StateHasChanged();
+            });
+        });
+
+        _playerLeaveSubscription = hostHub.PlayerLeave(async player =>
+        {
+            await InvokeAsync(() =>
+            {
+                RemovePlayer(player);
+                StateHasChanged();
+            });
+        });
+    }
+
+    private void UpsertPlayer(PlayerDTO player)
+    {
+        if (!string.IsNullOrWhiteSpace(player.PlayerId))
+        {
+            var existingById = Players.FindIndex(p => p.PlayerId == player.PlayerId);
+            if (existingById >= 0)
+            {
+                Players[existingById] = player;
+                return;
+            }
+        }
+
+        var existingByName = Players.FindIndex(p => p.Name == player.Name);
+        if (existingByName >= 0)
+        {
+            Players[existingByName] = player;
+            return;
+        }
+
+        Players.Add(player);
+    }
+
+    private void RemovePlayer(PlayerDTO player)
+    {
+        if (!string.IsNullOrWhiteSpace(player.PlayerId))
+        {
+            Players.RemoveAll(p => p.PlayerId == player.PlayerId);
+            return;
+        }
+
+        Players.RemoveAll(p => p.Name == player.Name);
+    }
+
+    private async Task StartLobby()
+    {
+        try
+        {
+            var login = await CreateLoginRequestAsync();
+            var question = await hostHub.StartQuiz(login, LobbyCode);
+            if (question == null)
+            {
+                return;
+            }
+
+            var answers = (await qc.GetAnswerByQuestionId(question.QuestionId, login))
+                          ?.OrderBy(a => a.OrderNumber)
+                          .ToList();
+
+            if (answers?.Count == 2)
+            {
+                nm.NavigateTo($"/lobby/{LobbyCode}/answers/host/tf");
+            }
+            else
+            {
+                nm.NavigateTo($"/lobby/{LobbyCode}/answers/host/mc");
+            }
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private async Task KickPlayerAsync(PlayerDTO player)
+    {
+        if (string.IsNullOrWhiteSpace(player.PlayerId) || _busyPlayerId == player.PlayerId)
+        {
+            return;
+        }
+
+        try
+        {
+            _busyPlayerId = player.PlayerId;
+            await hostHub.KickPlayer(await CreateLoginRequestAsync(), LobbyCode, player.PlayerId);
+            RemovePlayer(player);
+        }
+        catch (Exception ex)
+        {
+        }
+        finally
+        {
+            _busyPlayerId = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private bool IsBusyPlayer(PlayerDTO player) => !string.IsNullOrWhiteSpace(player.PlayerId) && _busyPlayerId == player.PlayerId;
+
+    private async Task<LoginRequest> CreateLoginRequestAsync()
+    {
+        return new LoginRequest(_user,
+             await localStorage.GetItemAsync<string>("Password") ?? string.Empty
+        );
+    }
+
+    private Task LoginRedirect()
+    {
+        nm.NavigateTo("/LoginPage", true);
+        return Task.CompletedTask;
+    }
+
+    private async Task CancelLobby()
+    {
+        try
+        {
+            await lac.DeleteLobby(LobbyId, await CreateLoginRequestAsync());
+        }
+        catch (Exception ex)
+        {
+        }
+        nm.NavigateTo("/OwnedQuizPage");
+    }
+
+    public void Dispose()
+    {
+        _refreshCts.Cancel();
+        _refreshCts.Dispose();
+        _playerJoinSubscription?.Dispose();
+        _playerLeaveSubscription?.Dispose();
+    }
+}

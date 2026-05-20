@@ -1,0 +1,79 @@
+.sidebar {
+    width: 320px;
+    background: linear-gradient(180deg, #8AAB00, #5BB933, #4b8f28);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 2rem 1.5rem;
+    color: white;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.25);
+}
+
+.sidebar-header {
+    margin-bottom: 2rem;
+}
+
+.side-brand {
+    font-family: "cowboyslang-expanded", sans-serif;
+    font-size: 2.4rem;
+    margin: 0;
+}
+
+.side-text {
+    font-size: 1rem;
+    opacity: 0.85;
+    margin-top: 0.3rem;
+}
+
+.menu {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    flex-grow: 1;
+}
+
+.menu-item {
+    text-decoration: none;
+    color: white;
+    font-weight: 600;
+    font-size: 1.2rem;
+    padding: 0.8rem 1rem;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: all 0.25s ease;
+}
+
+.menu-item:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateX(6px);
+}
+
+.menu-icon {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+}
+
+.sidebar-footer {
+    text-align: center;
+    margin-top: 2rem;
+}
+
+.sidebar-logo {
+    width: 90px;
+    margin-bottom: 0.5rem;
+    animation: float 4s ease-in-out infinite;
+}
+
+.footer-text {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}

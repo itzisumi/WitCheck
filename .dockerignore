@@ -1,0 +1,15 @@
+﻿**/.git
+**/.vs
+**/.vscode
+**/.idea
+**/.env
+**/*.*proj.user
+**/bin
+**/obj
+**/node_modules
+**/*.dbmdl
+**/*.jfm
+**/npm-debug.log
+LICENSE
+README.md
+*.log
