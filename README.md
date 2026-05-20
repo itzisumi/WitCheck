@@ -8,7 +8,7 @@
 
 ## Preview
 
-[![Watch the demo](assets/pic1.png)](https://pub-908671fa2f5740e2bb5d5c75eac30440.r2.dev/WitCheckVorschauNew.mp4)
+[![Watch the demo](assets/preview.png)](https://pub-908671fa2f5740e2bb5d5c75eac30440.r2.dev/WitCheckVorschauNew.mp4)
 *Click the image to watch the demo video*
 
 ---
@@ -26,7 +26,7 @@ Quizzes support multiple choice and true/false questions. Hosts can build and ma
 <table>
   <tr>
     <td><img src="assets/MyQuizzes.png" alt="My Quizzes" /></td>
-    <td><img src="assets/pic1.png" alt="Question screen" /></td>
+    <td><img src="assets/preview.png" alt="Question screen" /></td>
   </tr>
   <tr>
     <td align="center">Quiz management</td>
