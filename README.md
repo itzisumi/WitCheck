@@ -26,17 +26,19 @@ Quizzes support multiple choice and true/false questions. Hosts can build and ma
 <table>
   <tr>
     <td><img src="assets/MyQuizzes.png" alt="My Quizzes" /></td>
-    <td><img src="assets/preview.png" alt="Question screen" /></td>
+    <td><img src="assets/preview.png" alt="Quiz editor" /></td>
   </tr>
   <tr>
     <td align="center">Quiz management</td>
+    <td align="center">Quiz editor</td>
+  </tr>
+  <tr>
+    <td><img src="assets/question.png" alt="Live question with timer" /></td>
+    <td><img src="assets/Leaderboard.png" alt="Leaderboard" /></td>
+  </tr>
+  <tr>
     <td align="center">Live question with timer</td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center"><img src="assets/Leaderboard.png" width="300" alt="Leaderboard" /></td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center">Final leaderboard</td>
+    <td align="center">Final leaderboard</td>
   </tr>
 </table>
 
